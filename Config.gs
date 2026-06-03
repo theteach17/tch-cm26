@@ -7,7 +7,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.0.0',
+  VERSION: '1.2.0-hotfix-ui',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '1Xs7L1kxtUBDcXiXcYXhStDEaxGV2SdUaZZa9QnbVdpo',
   DEFAULT_SOURCE_SPREADSHEET_ID: '1P8MJ8PPzXg9TkApNl529NOj8UverQ-5hV498Hk0TXpQ',

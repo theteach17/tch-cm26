@@ -169,8 +169,30 @@ async function markAbsentUI(){const sid=document.getElementById('scanSession').v
 async function discoverTopicsUI(){const cls=document.getElementById('topicClass').value;const r=await call('api_listDiscoveredTopics',{class_code:cls});document.getElementById('topicResults').innerHTML='<div class="table-responsive"><table class="table table-sm"><thead><tr><th>ห้อง</th><th>หัวข้อ</th><th>จำนวน</th><th></th></tr></thead><tbody>'+r.data.map(t=>`<tr><td>${t.class_text}</td><td>${t.form_topic_text}</td><td>${t.count}</td><td><button class="btn btn-sm btn-outline-primary" onclick="pickTopic('${t.class_code}', '${String(t.form_topic_text).replace(/'/g,"\\'")}')">เลือก</button></td></tr>`).join('')+'</tbody></table></div>';}
 function pickTopic(cls,topic){document.getElementById('topicClass').value=cls;document.getElementById('topicFormText').value=topic;document.getElementById('topicDisplay').value=topic;}
 async function saveTopicUI(){const r=await call('api_createTopicMap',{class_code:document.getElementById('topicClass').value,form_topic_text:document.getElementById('topicFormText').value,display_topic_name:document.getElementById('topicDisplay').value,score:document.getElementById('topicScore').value,assigned_date:document.getElementById('topicAssigned').value,sync_mode:document.getElementById('topicSyncMode').value,import_now:true});document.getElementById('topicResults').innerHTML='<pre>'+pretty(r.data)+'</pre>';toast('บันทึกหัวข้อแล้ว');}
-async function syncNewUI(){const r=await call('api_syncNewFormRows');document.getElementById('syncResult').textContent=pretty(r.data);}
-async function syncAllUI(){if(!confirm('Sync ทั้งหมดอาจใช้เวลานานและตรวจข้อมูลซ้ำ ต้องการดำเนินการหรือไม่'))return;const r=await call('api_syncAllFormRows');document.getElementById('syncResult').textContent=pretty(r.data);}
+async function syncNewUI(){
+  const box=document.getElementById('syncResult');
+  box.textContent='กำลัง Sync รายการใหม่แบบแบ่งชุด...';
+  const r=await call('api_syncNewFormRows');
+  box.textContent=pretty(r.data);
+}
+async function syncAllUI(){
+  if(!confirm('Sync ทั้งหมด / Rebuild จะประมวลผลแบบแบ่งชุดเพื่อป้องกัน Timeout ต้องการดำเนินการหรือไม่')) return;
+  const box=document.getElementById('syncResult');
+  const total={imported:0,normalized:0,files:0,scores:0,errors:0};
+  let startRow=null, hasMore=true, round=0, last=null;
+  while(hasMore){
+    round++;
+    box.textContent='กำลัง Sync ชุดที่ '+round+' ...\n'+pretty(total);
+    const r=await call('api_syncAllFormRowsChunk',{start_row:startRow,chunk_size:80,reset_cursor:round===1});
+    const d=r.data||{}; last=d;
+    ['imported','normalized','files','scores','errors'].forEach(k=>total[k]+=Number(d[k]||0));
+    hasMore=!!d.hasMore;
+    startRow=d.nextStartRow;
+    box.textContent='ประมวลผลถึงแถว '+(d.endRow||'-')+' / '+(d.lastRow||'-')+' ('+(d.percent||0)+'%)\n'+pretty(total);
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  box.textContent='Sync ทั้งหมดเสร็จแล้ว\n'+pretty({summary:total,lastChunk:last});
+}
 async function loadReviewUI(){const r=await call('api_listSubmissionsForReview',{class_code:document.getElementById('reviewClass').value,review_status:document.getElementById('reviewStatus').value,limit:120});document.getElementById('reviewList').innerHTML=r.data.map(sub=>`<div class="col-md-4"><div class="card p-3 h-100"><div><b>${sub.student_name||sub.student_id}</b> <span class="badge text-bg-light">${sub.class_code}</span></div><div class="small-muted">${sub.form_topic_text}<br>${sub.timestamp}</div><div class="d-flex gap-2 flex-wrap my-2">${(sub.files||[]).map(f=>`<a href="${f.file_url}" target="_blank"><img class="img-thumb" src="${f.preview_url}" onerror="this.style.display='none'"></a>`).join('')}</div><div class="mb-2"><span class="badge text-bg-info">${sub.review_status}</span> <span class="badge text-bg-secondary">${sub.score_status}</span></div><div class="btn-group flex-wrap"><button class="btn btn-sm btn-success" onclick="review('${sub.submission_id}','APPROVE')">ผ่าน</button><button class="btn btn-sm btn-danger" onclick="review('${sub.submission_id}','VOID_NO_STAMP','ไม่มีตราปั๊ม')">ไม่มีตรา</button><button class="btn btn-sm btn-warning" onclick="review('${sub.submission_id}','VOID_WRONG_TOPIC','ส่งผิดหัวข้อ')">ผิดหัวข้อ</button><button class="btn btn-sm btn-outline-secondary" onclick="review('${sub.submission_id}','RESTORE_SCORE')">คืนคะแนน</button></div></div></div>`).join('')||'<div class="alert alert-info">ไม่พบรายการ</div>';}
 async function review(id,action,reason=''){await call('api_reviewSubmission',id,action,reason,'');toast('บันทึกผลตรวจแล้ว');loadReviewUI();}
 async function randomBookUI(){const sid=document.getElementById('scoreSession').value;const r=await call('api_randomBookCheck',sid,5);document.getElementById('scoreResult').innerHTML=r.data.map(x=>`<div class="border rounded p-2 mb-2">${x.student_id} <button class="btn btn-sm btn-success" onclick="saveBook('${sid}','${x.student_id}','BROUGHT')">นำสมุดมา</button> <button class="btn btn-sm btn-danger" onclick="saveBook('${sid}','${x.student_id}','NOT_BROUGHT')">ไม่ได้นำมา</button></div>`).join('');}

@@ -17,6 +17,7 @@ function api_initializeSystem(options) { return initializeSystem(options || {});
 function api_detectFormHeaders() { return detectFormHeaders(); }
 function api_syncNewFormRows() { return syncNewFormRows(); }
 function api_syncAllFormRows() { return syncAllFormRowsForActiveSource(); }
+function api_syncAllFormRowsChunk(payload) { return syncAllFormRowsChunk(payload || {}); }
 function api_listDiscoveredTopics(payload) { return listDiscoveredTopics(payload || {}); }
 function api_createTopicMap(payload) { return createOrUpdateTopicMap(payload || {}); }
 function api_previewRetroactiveImport(payload) { return previewRetroactiveImport(payload || {}); }
