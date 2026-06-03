@@ -1,16 +1,23 @@
 function getDb_() {
   const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty('DB_SPREADSHEET_ID') || APP.DEFAULT_DB_SPREADSHEET_ID;
-  try { return SpreadsheetApp.openById(id); }
-  catch (err) {
-    const active = SpreadsheetApp.getActiveSpreadsheet();
-    if (active) return active;
-    throw err;
-  }
+  const id = props.getProperty('DB_SPREADSHEET_ID') || APP.DEFAULT_DB_SPREADSHEET_ID || '';
+  if (id) return SpreadsheetApp.openById(id);
+  const active = SpreadsheetApp.getActiveSpreadsheet();
+  if (active) return active;
+  throw new Error('Database spreadsheet ID is not configured. Run setDbSpreadsheetId(spreadsheetId) from the Apps Script editor.');
 }
 function setDbSpreadsheetId(spreadsheetId) {
+  spreadsheetId = validateSpreadsheetId_(spreadsheetId, 'DB_SPREADSHEET_ID');
   PropertiesService.getScriptProperties().setProperty('DB_SPREADSHEET_ID', spreadsheetId);
+  invalidateStudentCache_();
   return ok_({ spreadsheetId }, 'Database spreadsheet ID saved');
+}
+function setSourceSpreadsheetId(spreadsheetId, sheetName) {
+  assertRole_(['ADMIN']);
+  spreadsheetId = validateSpreadsheetId_(spreadsheetId, 'SOURCE_FORM_SPREADSHEET_ID');
+  setSetting_('SOURCE_FORM_SPREADSHEET_ID', spreadsheetId, 'text', 'Google Form response spreadsheet ID');
+  if (sheetName) setSetting_('SOURCE_FORM_SHEET_NAME', sheetName, 'text', 'Google Form response sheet name');
+  return ok_({ spreadsheetId, sheetName: sheetName || getSetting_('SOURCE_FORM_SHEET_NAME') || APP.DEFAULT_SOURCE_SHEET_NAME }, 'Source spreadsheet ID saved');
 }
 function sh_(sheetName) {
   const ss = getDb_();
@@ -59,6 +66,9 @@ function appendObjects_(sheetName, objects) {
   const headers = SCHEMA[sheetName];
   const rows = objects.map(obj => headers.map(h => obj[h] === undefined ? '' : obj[h]));
   sh.getRange(sh.getLastRow()+1, 1, rows.length, headers.length).setValues(rows);
+  if (sheetName === SHEETS.STUDENTS) invalidateStudentCache_();
+  if (sheetName === SHEETS.ENROLLMENTS) objects.forEach(o => invalidateEnrollmentCache_(o.offering_id));
+  if (sheetName === SHEETS.ATTENDANCE_INDEX) objects.forEach(o => invalidateAttendanceIndexCache_(o.session_id));
   return rows.length;
 }
 function updateRowById_(sheetName, idField, idValue, patch) {
@@ -66,10 +76,12 @@ function updateRowById_(sheetName, idField, idValue, patch) {
   const target = rows.find(r => String(r[idField]) === String(idValue));
   if (!target) return false;
   const sh = sh_(sheetName);
-  const { map } = headerMap_(sheetName);
-  Object.keys(patch).forEach(k => {
-    if (map[k] !== undefined) sh.getRange(target.__row, map[k]+1).setValue(patch[k]);
-  });
+  const { headers } = headerMap_(sheetName);
+  const fullRow = headers.map(h => patch[h] !== undefined ? patch[h] : (target[h] === undefined ? '' : target[h]));
+  sh.getRange(target.__row, 1, 1, headers.length).setValues([fullRow]);
+  if (sheetName === SHEETS.STUDENTS) invalidateStudentCache_();
+  if (sheetName === SHEETS.ENROLLMENTS) invalidateEnrollmentCache_(target.offering_id || patch.offering_id);
+  if (sheetName === SHEETS.ATTENDANCE_INDEX) invalidateAttendanceIndexCache_(target.session_id || patch.session_id);
   return true;
 }
 function findOne_(sheetName, predicate) { return getRows_(sheetName).find(predicate) || null; }

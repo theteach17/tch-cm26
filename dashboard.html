@@ -1,0 +1,27 @@
+<section id="dashboard" class="section active">
+  <h3 class="mb-3">แดชบอร์ด</h3>
+  <div class="row g-3" id="dashCards"></div>
+  <div class="card p-3 mt-3"><h5>คาบที่กำลังเปิด</h5><div id="activeSessions"></div></div>
+</section>
+<section id="setup" class="section">
+  <h3>ตั้งค่าระบบ</h3>
+  <div class="card p-3 mb-3">
+    <div class="alert alert-warning mb-3">เพื่อความปลอดภัย ระบบเวอร์ชันนี้ไม่ฝัง Spreadsheet ID ในโค้ด ให้ตั้งค่าผ่าน Properties/SystemConfig เท่านั้น</div>
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Source Form Response Spreadsheet ID</label><input id="setupSourceId" class="form-control" placeholder="ใส่เฉพาะ ID ของชีตคำตอบ Google Form"></div>
+      <div class="col-md-3"><label class="form-label">ชื่อชีตคำตอบ</label><input id="setupSourceSheet" class="form-control" value="Form Responses 1"></div>
+      <div class="col-md-3 d-flex align-items-end"><button class="btn btn-primary w-100" onclick="initializeSystemUI()">Initialize / Repair</button></div>
+      <div class="col-md-3"><button class="btn btn-outline-primary w-100" onclick="detectHeadersUI()">Detect Form Headers</button></div>
+      <div class="col-md-3"><button class="btn btn-outline-secondary w-100" onclick="installTriggerUI()">ติดตั้ง Sync Trigger 5 นาที</button></div>
+      <div class="col-md-3"><button class="btn btn-success w-100" onclick="autoRepairUI()">ซ่อมอัตโนมัติ</button></div>
+    </div>
+  </div>
+  <div class="card p-3"><pre id="setupResult" class="mb-0"></pre></div>
+</section>
+<script>
+async function loadDashboard(){return runUiAction('loadDashboard',async()=>{const r=await call('api_getDashboardData');const d=r.data;document.getElementById('dashCards').innerHTML=[['คาบทั้งหมด',d.totalSessions],['งานส่ง',d.submissions],['รอตรวจ',d.pendingReview],['ยกเลิก',d.voided],['เข้าเรียนวันนี้',d.attendanceToday]].map(x=>`<div class="col-md"><div class="card p-3"><div class="small-muted">${x[0]}</div><div class="stat">${x[1]||0}</div></div></div>`).join('');document.getElementById('activeSessions').innerHTML=(d.activeSessions||[]).map(s=>`<div class="border rounded p-2 mb-2"><b>${escapeHtml(s.class_code)}</b> ${escapeHtml(s.session_date)} คาบ ${escapeHtml(s.period_no)} ${escapeHtml(s.lesson_title||'')} <button class="btn btn-sm btn-outline-danger float-end" onclick="closeSessionUI('${escapeAttr(s.session_id)}')">ปิดคาบ</button></div>`).join('')||'<div class="text-muted">ยังไม่มีคาบที่เปิดอยู่</div>';});}
+async function initializeSystemUI(){return runUiAction('initializeSystemUI',async()=>{const sourceSpreadsheetId=document.getElementById('setupSourceId').value.trim();const sourceSheetName=document.getElementById('setupSourceSheet').value.trim()||'Form Responses 1';const payload={};if(sourceSpreadsheetId)payload.sourceSpreadsheetId=sourceSpreadsheetId;if(sourceSheetName)payload.sourceSheetName=sourceSheetName;const r=await call('api_initializeSystem',payload);document.getElementById('setupResult').textContent=pretty(r.data);toast('Initialize/Repair สำเร็จ');await bootstrap();});}
+async function detectHeadersUI(){return runUiAction('detectHeadersUI',async()=>{const r=await call('api_detectFormHeaders');document.getElementById('setupResult').textContent=pretty(r.data);toast('ตรวจจับหัวตารางแล้ว');});}
+async function installTriggerUI(){return runUiAction('installTriggerUI',async()=>{const r=await call('api_installSyncTrigger',5);document.getElementById('setupResult').textContent=pretty(r.data);toast('ติดตั้ง Trigger แล้ว');});}
+async function autoRepairUI(){return runUiAction('autoRepairUI',async()=>{const r=await call('api_autoRepairSystem',{});const target=document.getElementById('setupResult')||document.getElementById('syncResult');if(target)target.textContent=pretty(r.data);toast('ซ่อมอัตโนมัติสำเร็จ');});}
+</script>

@@ -1,13 +1,14 @@
 /**
  * SourceFormService.gs
- * v1.1.0 hotfix: chunked sync + batched normalization to prevent Web App timeout.
+ * v1.4.0 production-audit: chunked sync + guarded API + cache-aware normalization.
  */
 
 const SYNC_CHUNK_DEFAULT = 80;
 const SYNC_CHUNK_MAX = 200;
 
 function openSourceSpreadsheet_(source) {
-  return SpreadsheetApp.openById(source.spreadsheet_id);
+  if (!source || !source.spreadsheet_id) throw new Error('Source Form spreadsheet ID is not configured. Set SOURCE_FORM_SPREADSHEET_ID in SystemConfig or run initializeSystem({sourceSpreadsheetId:'<ID>'}).');
+  return SpreadsheetApp.openById(validateSpreadsheetId_(source.spreadsheet_id, 'source.spreadsheet_id'));
 }
 
 function detectFormHeaders() {
@@ -62,6 +63,7 @@ function getHeaderMaps_(sourceId) {
 }
 
 function syncNewFormRows() {
+  assertRole_(['ADMIN','TEACHER']);
   const lock = lock_(30000);
   try {
     const source = getActiveSource_();
@@ -170,21 +172,14 @@ function syncFormRows_(source, startRow, endRow, options) {
 }
 
 function buildSyncContext_(source) {
-  const students = getRows_(SHEETS.STUDENTS);
-  const byId = {}, byRfid = {};
-  students.forEach(s => {
-    byId[cleanId_(s.student_id)] = s;
-    if (s.rfid_code) byRfid[cleanId_(s.rfid_code)] = s;
-    if (s.student_pay_code) byRfid[cleanId_(s.student_pay_code)] = s;
-    if (s.backup_card_code) byRfid[cleanId_(s.backup_card_code)] = s;
-  });
+  const studentMap = getCachedStudentMap_();
   const existingClasses = new Set(getRows_(SHEETS.CLASSES).map(r => String(r.class_code)));
   return {
     source,
     maps: getHeaderMaps_(source.source_id),
     topicMap: buildTopicMap_(),
     offerings: buildOfferingMap_(),
-    studentMap: { byId, byRfid },
+    studentMap,
     existingRaw: new Set(getRows_(SHEETS.RAW_FORM_ROWS).map(r => String(r.row_hash))),
     existingSub: new Set(getRows_(SHEETS.NORMALIZED_SUBMISSIONS).map(r => String(r.submission_key))),
     existingScores: new Set(getRows_(SHEETS.SCORE_LEDGER).map(r => String(r.source_ref))),
@@ -209,6 +204,8 @@ function appendAutomationObjects_(context) {
   if (topics.length) appendObjects_(SHEETS.TOPIC_MAP, topics);
   if (students.length) appendObjects_(SHEETS.STUDENTS, students);
   if (enrollments.length) appendObjects_(SHEETS.ENROLLMENTS, enrollments);
+  if (students.length) invalidateStudentCache_();
+  enrollments.forEach(e => invalidateEnrollmentCache_(e.offering_id));
 }
 
 function findGlobalValue_(headers, row, names) {

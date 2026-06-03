@@ -1,10 +1,12 @@
 function randomBookCheck(sessionId, count) {
   assertRole_(['ADMIN','TEACHER']);
+  validate_({ sessionId, count: count || 1 }, { sessionId: { required: true, maxLen: 120 }, count: { type: 'number' } });
   const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
   if (!session) throw new Error('Session not found');
+  assertOfferingAccess_(session.offering_id);
   count = Number(count || getSetting_('RANDOM_BOOK_CHECK_COUNT') || 5);
   const presentIds = new Set(getRows_(SHEETS.ATTENDANCE_LOG).filter(r => String(r.session_id) === String(sessionId) && String(r.attendance_status) === 'PRESENT').map(r => cleanId_(r.student_id)));
-  const enrollments = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === String(session.offering_id) && String(r.enrollment_status) === 'ACTIVE');
+  const enrollments = getCachedEnrollmentsByOffering_(session.offering_id);
   const pool = enrollments.filter(e => presentIds.size ? presentIds.has(cleanId_(e.student_id)) : true);
   const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, count);
   return ok_(shuffled, 'Students randomized');
@@ -12,8 +14,10 @@ function randomBookCheck(sessionId, count) {
 function saveBookCheckResult(payload) {
   assertRole_(['ADMIN','TEACHER']);
   payload = payload || {};
+  validate_(payload, { session_id: { required: true, maxLen: 120 }, student_id: { required: true, maxLen: 20 }, result: { maxLen: 40 }, score_delta: { type: 'number' } });
   const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(payload.session_id));
   if (!session) throw new Error('Session not found');
+  assertOfferingAccess_(session.offering_id);
   const result = payload.result || 'BROUGHT';
   const delta = payload.score_delta !== undefined ? Number(payload.score_delta) : (result === 'BROUGHT' ? numericOrZero_(getSetting_('DEFAULT_BOOK_BROUGHT_SCORE') || 1) : numericOrZero_(getSetting_('DEFAULT_BOOK_NOT_BROUGHT_SCORE') || -1));
   const id = uuid_('BOOK');
@@ -24,11 +28,13 @@ function saveBookCheckResult(payload) {
 function saveManualScore(payload) {
   assertRole_(['ADMIN','TEACHER']);
   payload = payload || {};
+  validate_(payload, { session_id: { maxLen: 120 }, offering_id: { maxLen: 120 }, student_id: { maxLen: 20 }, score_title: { maxLen: 200 }, score_delta: { required: true, type: 'number' } });
   const session = payload.session_id ? findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(payload.session_id)) : null;
   const termId = session ? session.term_id : (payload.term_id || getActiveTerm_());
   const offeringId = session ? session.offering_id : payload.offering_id;
   const offering = getOffering_(offeringId);
   if (!offering) throw new Error('Offering not found');
+  assertOfferingAccess_(offering.offering_id);
   const students = Array.isArray(payload.student_ids) ? payload.student_ids : [payload.student_id];
   const manualRows = [], scoreRows = [];
   students.filter(Boolean).forEach(studentIdRaw => {
@@ -44,7 +50,8 @@ function saveManualScore(payload) {
 function getDashboardData() {
   const termId = getActiveTerm_();
   const sessions = getRows_(SHEETS.SESSIONS).filter(r => String(r.term_id) === termId);
-  const activeSessions = sessions.filter(r => String(r.status) === 'ACTIVE');
+  const allowedOfferings = new Set(listActiveOfferings().map(o => String(o.offering_id)));
+  const activeSessions = sessions.filter(r => String(r.status) === 'ACTIVE' && allowedOfferings.has(String(r.offering_id)));
   const submissions = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(r => String(r.term_id) === termId);
   const pending = submissions.filter(r => String(r.review_status) === 'PENDING').length;
   const voided = submissions.filter(r => String(r.score_status) === 'VOIDED').length;
@@ -53,10 +60,12 @@ function getDashboardData() {
 }
 function getGradebook(payload) {
   payload = payload || {};
+  validate_(payload, { offering_id: { required: true, maxLen: 120 }, term_id: { maxLen: 40 } });
   const termId = payload.term_id || getActiveTerm_();
   const offeringId = payload.offering_id;
   const offering = getOffering_(offeringId);
   if (!offering) throw new Error('Offering not found');
+  assertOfferingAccess_(offering.offering_id);
   const enrollments = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === offeringId && String(r.enrollment_status) === 'ACTIVE');
   const students = buildStudentMap_().byId;
   const scores = getRows_(SHEETS.SCORE_LEDGER).filter(r => String(r.term_id) === termId && String(r.offering_id) === offeringId && String(r.status) === 'ACTIVE');

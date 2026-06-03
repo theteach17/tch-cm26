@@ -7,12 +7,11 @@
   <title><?= appName ?></title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    body{font-family:'Kanit',sans-serif;background:#f6f8fb;color:#263238}.app-shell{display:flex;min-height:100vh}.sidebar{width:280px;background:#132238;color:#fff;padding:18px;position:sticky;top:0;height:100vh;overflow:auto}.brand{font-size:1.15rem;font-weight:700;line-height:1.35}.nav-btn{width:100%;text-align:left;margin:.25rem 0;border:0;background:transparent;color:#dce7ff;padding:.65rem .75rem;border-radius:12px}.nav-btn:hover,.nav-btn.active{background:#294467;color:#fff}.main{flex:1;padding:22px}.card{border:0;border-radius:18px;box-shadow:0 8px 24px rgba(15,35,65,.08)}.stat{font-size:2rem;font-weight:700}.scan-box{font-size:2.2rem;height:76px;text-align:center;font-weight:700}.img-thumb{height:160px;object-fit:cover;border-radius:12px;border:1px solid #e0e6ef}.badge-soft{background:#edf4ff;color:#0d47a1}.table thead th{white-space:nowrap}.toast-area{position:fixed;right:18px;bottom:18px;z-index:2000}.small-muted{font-size:.85rem;color:#607d8b}.section{display:none}.section.active{display:block}.spinner-overlay{position:fixed;inset:0;background:rgba(255,255,255,.65);display:none;align-items:center;justify-content:center;z-index:3000}.spinner-overlay.show{display:flex}
-  </style>
+  <?!= include('styles'); ?>
 </head>
 <body>
 <div class="spinner-overlay" id="loading"><div class="spinner-border text-primary" role="status"></div></div>
+<div class="toast-area" id="toastArea"></div>
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand mb-3">Classroom<br>Management Ledger</div>
@@ -31,197 +30,13 @@
     <div class="small text-white-50" id="userBox">Loading...</div>
   </aside>
   <main class="main">
-    <section id="dashboard" class="section active">
-      <h3 class="mb-3">แดชบอร์ด</h3>
-      <div class="row g-3" id="dashCards"></div>
-      <div class="card p-3 mt-3"><h5>คาบที่กำลังเปิด</h5><div id="activeSessions"></div></div>
-    </section>
-
-    <section id="setup" class="section">
-      <h3>ตั้งค่าระบบ</h3>
-      <div class="card p-3 mb-3">
-        <p>กดครั้งแรกเพื่อสร้างชีท หัวตาราง ค่าเริ่มต้น ห้องเรียน รายวิชา และ source form response อัตโนมัติ</p>
-        <button class="btn btn-primary" onclick="initializeSystemUI()">Initialize / Repair System</button>
-        <button class="btn btn-outline-primary" onclick="detectHeadersUI()">Detect Form Headers</button>
-        <button class="btn btn-outline-secondary" onclick="installTriggerUI()">ติดตั้ง Sync Trigger ทุก 5 นาที</button>
-        <button class="btn btn-success" onclick="autoRepairUI()">ซ่อมอัตโนมัติ: สร้างหัวข้อ/คืนสถานะ Error</button>
-      </div>
-      <div class="card p-3"><pre id="setupResult" class="mb-0"></pre></div>
-    </section>
-
-    <section id="session" class="section">
-      <h3>เปิดคาบเรียน</h3>
-      <div class="card p-3">
-        <div class="row g-3">
-          <div class="col-md-4"><label class="form-label">ห้อง/รายวิชา</label><select id="sessionOffering" class="form-select"></select></div>
-          <div class="col-md-2"><label class="form-label">วันที่</label><input id="sessionDate" type="date" class="form-control"></div>
-          <div class="col-md-2"><label class="form-label">คาบที่</label><input id="periodNo" class="form-control" placeholder="เช่น 3"></div>
-          <div class="col-md-4"><label class="form-label">หัวข้อการสอน</label><input id="lessonTitle" class="form-control" placeholder="เช่น Prefix Practice"></div>
-          <div class="col-md-6"><label class="form-label">หัวข้อใน Google Form</label><input id="formTopicText" class="form-control" placeholder="เช่น Prefix - 29 May 2026"></div>
-          <div class="col-md-2"><label class="form-label">คะแนนงาน</label><input id="submissionScore" type="number" step="0.1" class="form-control" value="1"></div>
-          <div class="col-md-2 form-check mt-5"><input id="attendanceEnabled" class="form-check-input" type="checkbox" checked><label class="form-check-label">เช็กชื่อ</label></div>
-          <div class="col-md-2 form-check mt-5"><input id="bookCheckEnabled" class="form-check-input" type="checkbox"><label class="form-check-label">ตรวจสมุด</label></div>
-        </div>
-        <button class="btn btn-success mt-3" onclick="startSessionUI()">เริ่มคาบเรียน</button>
-      </div>
-      <div id="sessionResult" class="mt-3"></div>
-    </section>
-
-    <section id="attendance" class="section">
-      <h3>สแกนบัตรลงชื่อเข้าชั้นเรียน</h3>
-      <div class="card p-3 mb-3">
-        <div class="row g-3">
-          <div class="col-md-6"><label class="form-label">เลือกคาบที่เปิดอยู่</label><select id="scanSession" class="form-select" onchange="loadScanBootstrapUI()"></select></div>
-          <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-primary w-100" onclick="loadActiveSessionsUI()">โหลดคาบ</button></div>
-          <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-danger w-100" onclick="markAbsentUI()">ปิดยอดขาดเรียน</button></div>
-        </div>
-      </div>
-      <div class="card p-3">
-        <input id="scanInput" class="form-control scan-box" placeholder="แตะบัตรหรือพิมพ์เลขประจำตัว แล้วกด Enter" autocomplete="off">
-        <div class="mt-2 small-muted">ระบบจะแสดงผลทันทีจากข้อมูลที่ preload และส่งขึ้น server เป็น batch เพื่อลดปัญหาสแกนติดกันเร็ว ๆ</div>
-        <div class="row mt-3"><div class="col"><div class="badge badge-soft fs-6">มาแล้ว <span id="presentCount">0</span></div></div><div class="col"><div class="badge text-bg-light fs-6">ค้างส่ง server <span id="pendingScanCount">0</span></div></div></div>
-        <hr><div id="scanLog"></div>
-      </div>
-    </section>
-
-    <section id="topics" class="section">
-      <h3>หัวข้องาน / นำเข้าย้อนหลัง</h3>
-      <div class="card p-3 mb-3">
-        <div class="row g-3">
-          <div class="col-md-3"><label class="form-label">ห้อง</label><select id="topicClass" class="form-select"></select></div>
-          <div class="col-md-5"><label class="form-label">หัวข้อใน Google Form</label><input id="topicFormText" class="form-control"></div>
-          <div class="col-md-3"><label class="form-label">ชื่อแสดงผล</label><input id="topicDisplay" class="form-control"></div>
-          <div class="col-md-1"><label class="form-label">คะแนน</label><input id="topicScore" class="form-control" value="1"></div>
-          <div class="col-md-3"><label class="form-label">วันที่มอบหมาย</label><input id="topicAssigned" type="date" class="form-control"></div>
-          <div class="col-md-3"><label class="form-label">โหมด</label><select id="topicSyncMode" class="form-select"><option>LIVE</option><option>RETROACTIVE</option></select></div>
-          <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-info w-100" onclick="discoverTopicsUI()">ค้นหัวข้อจริงจาก Form</button></div>
-          <div class="col-md-3 d-flex align-items-end"><button class="btn btn-success w-100" onclick="saveTopicUI()">บันทึกหัวข้อ</button></div>
-          <div class="col-md-6 d-flex align-items-end"><button class="btn btn-warning w-100" onclick="autoMapTopicsUI()">สร้างหัวข้องานอัตโนมัติจากรายการที่ Sync แล้ว</button></div>
-        </div>
-      </div>
-      <div class="card p-3"><div id="topicResults"></div></div>
-    </section>
-
-    <section id="sync" class="section">
-      <h3>ดึงข้อมูลจาก Google Form</h3>
-      <div class="card p-3">
-        <button class="btn btn-primary" onclick="syncNewUI()">Sync เฉพาะรายการใหม่</button>
-        <button class="btn btn-warning" onclick="syncAllUI()">Sync ทั้งหมด / Rebuild จากต้นทาง</button>
-        <button class="btn btn-success" onclick="autoRepairUI()">Auto Fix หัวข้อ/คะแนน/Error</button>
-        <pre id="syncResult" class="mt-3"></pre>
-      </div>
-    </section>
-
-    <section id="review" class="section">
-      <h3>ตรวจงานจากรูปภาพ</h3>
-      <div class="card p-3 mb-3">
-        <div class="row g-3"><div class="col-md-3"><select id="reviewClass" class="form-select"></select></div><div class="col-md-3"><select id="reviewStatus" class="form-select"><option value="">ทุกสถานะ</option><option>PENDING</option><option>APPROVED</option><option>NO_STAMP</option><option>WRONG_TOPIC</option><option>DUPLICATE</option><option>UNCLEAR</option></select></div><div class="col-md-3"><button class="btn btn-primary" onclick="loadReviewUI()">โหลดรายการ</button></div></div>
-      </div>
-      <div id="reviewList" class="row g-3"></div>
-    </section>
-
-    <section id="scores" class="section">
-      <h3>คะแนนสมุด / คะแนนพิเศษ</h3>
-      <div class="card p-3">
-        <div class="row g-3">
-          <div class="col-md-4"><label>คาบ</label><select id="scoreSession" class="form-select"></select></div>
-          <div class="col-md-3"><label>เลขประจำตัว</label><input id="manualStudentId" class="form-control"></div>
-          <div class="col-md-3"><label>ชื่อรายการ</label><input id="manualTitle" class="form-control" value="คะแนนพิเศษ"></div>
-          <div class="col-md-2"><label>คะแนน</label><input id="manualDelta" class="form-control" value="1"></div>
-        </div>
-        <button class="btn btn-success mt-3" onclick="saveManualScoreUI()">บันทึกคะแนนพิเศษ</button>
-        <button class="btn btn-outline-primary mt-3" onclick="randomBookUI()">สุ่มตรวจสมุด 5 คน</button>
-        <div id="scoreResult" class="mt-3"></div>
-      </div>
-    </section>
-
-    <section id="gradebook" class="section">
-      <h3>สมุดคะแนน</h3>
-      <div class="card p-3 mb-3"><div class="row g-3"><div class="col-md-6"><select id="gradeOffering" class="form-select"></select></div><div class="col-md-3"><button class="btn btn-primary" onclick="loadGradebookUI()">ดูสมุดคะแนน</button></div><div class="col-md-3"><button class="btn btn-outline-success" onclick="regenRoomSheetsUI()">สร้างชีทรายห้อง</button></div></div></div>
-      <div class="card p-3"><div class="table-responsive"><table class="table table-sm table-hover" id="gradeTable"></table></div></div>
-    </section>
-
-    <section id="archive" class="section">
-      <h3>Archive ภาคเรียน</h3>
-      <div class="card p-3"><p>ใช้เมื่อจบภาคเรียน ระบบจะสร้างไฟล์ archive แยกจากฐานปัจจุบัน</p><button class="btn btn-danger" onclick="archiveTermUI()">สร้าง Archive ภาคเรียนปัจจุบัน</button><pre id="archiveResult" class="mt-3"></pre></div>
-    </section>
+    <?!= include('dashboard'); ?>
+    <?!= include('session'); ?>
+    <?!= include('topicsSync'); ?>
+    <?!= include('review'); ?>
+    <?!= include('gradebook'); ?>
   </main>
 </div>
-<div class="toast-area" id="toastArea"></div>
-<script>
-const state = { user:null, offerings:[], activeSessions:[], scan:{sessionId:'', idMap:{}, rfidMap:{}, present:{}, pending:[], timer:null} };
-function showLoading(v){document.getElementById('loading').classList.toggle('show',!!v)}
-function call(fn, ...args){showLoading(true);return new Promise((resolve,reject)=>{google.script.run.withSuccessHandler(r=>{showLoading(false); if(r && r.ok===false){toast(r.message,'danger'); reject(r);} else resolve(r);}).withFailureHandler(e=>{showLoading(false); toast(e.message||e,'danger'); reject(e);})[fn](...args);});}
-function toast(msg,type='success'){const id='t'+Date.now();document.getElementById('toastArea').insertAdjacentHTML('beforeend',`<div id="${id}" class="alert alert-${type} shadow">${msg}</div>`);setTimeout(()=>document.getElementById(id)?.remove(),4200)}
-function pretty(obj){return JSON.stringify(obj,null,2)}
-function initNav(){document.querySelectorAll('.nav-btn').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(btn.dataset.section).classList.add('active'); if(btn.dataset.section==='dashboard') loadDashboard(); if(btn.dataset.section==='attendance') loadActiveSessionsUI();}))}
-function fillOfferingSelects(){const opts=state.offerings.map(o=>`<option value="${o.offering_id}" data-class="${o.class_code}">${o.class_text} | ${o.course_code}</option>`).join('');['sessionOffering','gradeOffering'].forEach(id=>document.getElementById(id).innerHTML=opts); const classOpts=[...new Map(state.offerings.map(o=>[o.class_code,o])).values()].map(o=>`<option value="${o.class_code}">${o.class_text}</option>`).join('');['topicClass','reviewClass'].forEach(id=>document.getElementById(id).innerHTML='<option value="">ทุกห้อง</option>'+classOpts)}
-async function bootstrap(){initNav();document.getElementById('sessionDate').value=new Date().toISOString().slice(0,10);document.getElementById('topicAssigned').value=new Date().toISOString().slice(0,10);const r=await call('api_bootstrap');state.user=r.data.user;state.offerings=r.data.offerings||[];document.getElementById('userBox').textContent=`${state.user.email} | ${state.user.role}`;fillOfferingSelects();loadDashboard();}
-async function initializeSystemUI(){const r=await call('api_initializeSystem',{});document.getElementById('setupResult').textContent=pretty(r);toast('Initialize สำเร็จ');bootstrap();}
-async function detectHeadersUI(){const r=await call('api_detectFormHeaders');document.getElementById('setupResult').textContent=pretty(r.data);}
-async function installTriggerUI(){const r=await call('api_installSyncTrigger',5);document.getElementById('setupResult').textContent=pretty(r);}
-async function autoMapTopicsUI(){
-  const cls=document.getElementById('topicClass').value;
-  const r=await call('api_autoMapAndReprocessTopics',{class_code:cls});
-  document.getElementById('topicResults').innerHTML='<pre>'+pretty(r.data)+'</pre>';
-  toast('สร้างหัวข้อและประมวลผลรายการค้างอัตโนมัติแล้ว');
-}
-async function autoRepairUI(){
-  const resultBox=document.querySelector('.section.active pre')||document.getElementById('syncResult')||document.getElementById('setupResult');
-  if(resultBox) resultBox.textContent='กำลังซ่อมอัตโนมัติ: สร้าง TopicMap, reprocess งานค้าง, resolve ErrorLog...';
-  const r=await call('api_autoRepairSystem',{});
-  if(resultBox) resultBox.textContent=pretty(r.data);
-  toast('ซ่อมอัตโนมัติสำเร็จ');
-  loadDashboard();
-}
-
-async function loadDashboard(){const r=await call('api_getDashboardData');const d=r.data;document.getElementById('dashCards').innerHTML=[['คาบที่เปิด',d.activeSessions.length],['ส่งงานทั้งหมด',d.submissions],['รอตรวจ',d.pendingReview],['ถูกยกเลิก',d.voided],['เช็กชื่อวันนี้',d.attendanceToday]].map(x=>`<div class="col-md"><div class="card p-3"><div>${x[0]}</div><div class="stat">${x[1]}</div></div></div>`).join('');document.getElementById('activeSessions').innerHTML=d.activeSessions.length?d.activeSessions.map(s=>`<div class="border rounded p-2 mb-2"><b>${s.class_code}</b> ${s.lesson_title||''} | ${s.session_date} คาบ ${s.period_no} <button class="btn btn-sm btn-outline-secondary float-end" onclick="closeSessionUI('${s.session_id}')">ปิดคาบ</button></div>`).join(''):'ไม่มีคาบที่เปิดอยู่';}
-async function startSessionUI(){const sel=document.getElementById('sessionOffering');const r=await call('api_startSession',{offering_id:sel.value,class_code:sel.selectedOptions[0]?.dataset.class,session_date:document.getElementById('sessionDate').value,period_no:document.getElementById('periodNo').value,lesson_title:document.getElementById('lessonTitle').value,form_topic_text:document.getElementById('formTopicText').value,submission_score:document.getElementById('submissionScore').value,attendance_enabled:document.getElementById('attendanceEnabled').checked,book_check_enabled:document.getElementById('bookCheckEnabled').checked});document.getElementById('sessionResult').innerHTML=`<div class="alert alert-success">เริ่มคาบแล้ว: ${r.data.session.session_id}</div>`;loadActiveSessionsUI();}
-async function closeSessionUI(id){await call('api_closeSession',id);toast('ปิดคาบแล้ว');loadDashboard();loadActiveSessionsUI();}
-async function loadActiveSessionsUI(){const r=await call('api_getActiveSessions');state.activeSessions=r.data;const opts=r.data.map(s=>`<option value="${s.session_id}">${s.class_code} | ${s.session_date} | คาบ ${s.period_no} | ${s.lesson_title||''}</option>`).join('');['scanSession','scoreSession'].forEach(id=>document.getElementById(id).innerHTML=opts);}
-async function loadScanBootstrapUI(){const sid=document.getElementById('scanSession').value;if(!sid)return;const r=await call('api_getScanBootstrap',sid);state.scan.sessionId=sid;state.scan.idMap=r.data.idMap;state.scan.rfidMap=r.data.rfidMap;state.scan.present=r.data.present||{};document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;document.getElementById('scanInput').focus();toast('โหลดข้อมูลสแกนแล้ว');}
-document.addEventListener('DOMContentLoaded',()=>{bootstrap();const input=document.getElementById('scanInput');input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();handleScan(input.value);input.value='';}})});
-function handleScan(raw){raw=String(raw||'').trim();if(!raw||!state.scan.sessionId)return;const st=state.scan.rfidMap[raw]||state.scan.idMap[raw];let msg='',cls='';if(!st){msg='ไม่พบข้อมูล: '+raw;cls='danger'}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning'}else{state.scan.present[st.student_id]=true;msg='เช็กชื่อ: '+st.name;cls='success'}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;document.getElementById('scanLog').insertAdjacentHTML('afterbegin',`<div class="alert alert-${cls} py-2 mb-2">${new Date().toLocaleTimeString()} — ${msg}</div>`);state.scan.pending.push({raw,received_at:new Date().toISOString(),client_id:'web'});document.getElementById('pendingScanCount').textContent=state.scan.pending.length;if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,800)}
-async function flushScans(){const batch=state.scan.pending.splice(0,20);state.scan.timer=null;document.getElementById('pendingScanCount').textContent=state.scan.pending.length;if(!batch.length)return;try{const r=await call('api_processScanBatch',state.scan.sessionId,batch);r.data.results.forEach(x=>{if(!x.ok)document.getElementById('scanLog').insertAdjacentHTML('afterbegin',`<div class="alert alert-danger py-2 mb-2">Server: ${x.message} (${x.raw})</div>`)});}catch(e){state.scan.pending=batch.concat(state.scan.pending);document.getElementById('pendingScanCount').textContent=state.scan.pending.length}if(state.scan.pending.length&&!state.scan.timer)state.scan.timer=setTimeout(flushScans,800)}
-async function markAbsentUI(){const sid=document.getElementById('scanSession').value;if(!sid)return;const r=await call('api_markAbsentForSession',sid);toast('บันทึกขาดเรียน '+r.data.absent+' คน');}
-async function discoverTopicsUI(){const cls=document.getElementById('topicClass').value;const r=await call('api_listDiscoveredTopics',{class_code:cls});document.getElementById('topicResults').innerHTML='<div class="table-responsive"><table class="table table-sm"><thead><tr><th>ห้อง</th><th>หัวข้อ</th><th>จำนวน</th><th></th></tr></thead><tbody>'+r.data.map(t=>`<tr><td>${t.class_text}</td><td>${t.form_topic_text}</td><td>${t.count}</td><td><button class="btn btn-sm btn-outline-primary" onclick="pickTopic('${t.class_code}', '${String(t.form_topic_text).replace(/'/g,"\\'")}')">เลือก</button></td></tr>`).join('')+'</tbody></table></div>';}
-function pickTopic(cls,topic){document.getElementById('topicClass').value=cls;document.getElementById('topicFormText').value=topic;document.getElementById('topicDisplay').value=topic;}
-async function saveTopicUI(){const r=await call('api_createTopicMap',{class_code:document.getElementById('topicClass').value,form_topic_text:document.getElementById('topicFormText').value,display_topic_name:document.getElementById('topicDisplay').value,score:document.getElementById('topicScore').value,assigned_date:document.getElementById('topicAssigned').value,sync_mode:document.getElementById('topicSyncMode').value,import_now:true});document.getElementById('topicResults').innerHTML='<pre>'+pretty(r.data)+'</pre>';toast('บันทึกหัวข้อแล้ว');}
-async function syncNewUI(){
-  const box=document.getElementById('syncResult');
-  box.textContent='กำลัง Sync รายการใหม่แบบแบ่งชุด...';
-  const r=await call('api_syncNewFormRows');
-  const fix=await call('api_autoMapAndReprocessTopics',{});
-  box.textContent=pretty({sync:r.data, autoFix:fix.data});
-}
-async function syncAllUI(){
-  if(!confirm('Sync ทั้งหมด / Rebuild จะประมวลผลแบบแบ่งชุดเพื่อป้องกัน Timeout ต้องการดำเนินการหรือไม่')) return;
-  const box=document.getElementById('syncResult');
-  const total={imported:0,normalized:0,files:0,scores:0,errors:0};
-  let startRow=null, hasMore=true, round=0, last=null;
-  while(hasMore){
-    round++;
-    box.textContent='กำลัง Sync ชุดที่ '+round+' ...\n'+pretty(total);
-    const r=await call('api_syncAllFormRowsChunk',{start_row:startRow,chunk_size:80,reset_cursor:round===1});
-    const d=r.data||{}; last=d;
-    ['imported','normalized','files','scores','errors'].forEach(k=>total[k]+=Number(d[k]||0));
-    hasMore=!!d.hasMore;
-    startRow=d.nextStartRow;
-    box.textContent='ประมวลผลถึงแถว '+(d.endRow||'-')+' / '+(d.lastRow||'-')+' ('+(d.percent||0)+'%)\n'+pretty(total);
-    await new Promise(resolve=>setTimeout(resolve,250));
-  }
-  box.textContent='Sync ทั้งหมดเสร็จแล้ว กำลัง Auto Fix หัวข้อ/คะแนน/Error...\n'+pretty({summary:total,lastChunk:last});
-  const fix=await call('api_autoMapAndReprocessTopics',{});
-  box.textContent='Sync ทั้งหมดและ Auto Fix เสร็จแล้ว\n'+pretty({summary:total,lastChunk:last,autoFix:fix.data});
-}
-async function loadReviewUI(){const r=await call('api_listSubmissionsForReview',{class_code:document.getElementById('reviewClass').value,review_status:document.getElementById('reviewStatus').value,limit:120});document.getElementById('reviewList').innerHTML=r.data.map(sub=>`<div class="col-md-4"><div class="card p-3 h-100"><div><b>${sub.student_name||sub.student_id}</b> <span class="badge text-bg-light">${sub.class_code}</span></div><div class="small-muted">${sub.form_topic_text}<br>${sub.timestamp}</div><div class="d-flex gap-2 flex-wrap my-2">${(sub.files||[]).map(f=>`<a href="${f.file_url}" target="_blank"><img class="img-thumb" src="${f.preview_url}" onerror="this.style.display='none'"></a>`).join('')}</div><div class="mb-2"><span class="badge text-bg-info">${sub.review_status}</span> <span class="badge text-bg-secondary">${sub.score_status}</span></div><div class="btn-group flex-wrap"><button class="btn btn-sm btn-success" onclick="review('${sub.submission_id}','APPROVE')">ผ่าน</button><button class="btn btn-sm btn-danger" onclick="review('${sub.submission_id}','VOID_NO_STAMP','ไม่มีตราปั๊ม')">ไม่มีตรา</button><button class="btn btn-sm btn-warning" onclick="review('${sub.submission_id}','VOID_WRONG_TOPIC','ส่งผิดหัวข้อ')">ผิดหัวข้อ</button><button class="btn btn-sm btn-outline-secondary" onclick="review('${sub.submission_id}','RESTORE_SCORE')">คืนคะแนน</button></div></div></div>`).join('')||'<div class="alert alert-info">ไม่พบรายการ</div>';}
-async function review(id,action,reason=''){await call('api_reviewSubmission',id,action,reason,'');toast('บันทึกผลตรวจแล้ว');loadReviewUI();}
-async function randomBookUI(){const sid=document.getElementById('scoreSession').value;const r=await call('api_randomBookCheck',sid,5);document.getElementById('scoreResult').innerHTML=r.data.map(x=>`<div class="border rounded p-2 mb-2">${x.student_id} <button class="btn btn-sm btn-success" onclick="saveBook('${sid}','${x.student_id}','BROUGHT')">นำสมุดมา</button> <button class="btn btn-sm btn-danger" onclick="saveBook('${sid}','${x.student_id}','NOT_BROUGHT')">ไม่ได้นำมา</button></div>`).join('');}
-async function saveBook(sid,studentId,result){await call('api_saveBookCheckResult',{session_id:sid,student_id:studentId,result});toast('บันทึกตรวจสมุดแล้ว');}
-async function saveManualScoreUI(){await call('api_saveManualScore',{session_id:document.getElementById('scoreSession').value,student_id:document.getElementById('manualStudentId').value,score_title:document.getElementById('manualTitle').value,score_delta:document.getElementById('manualDelta').value});toast('บันทึกคะแนนแล้ว');}
-async function loadGradebookUI(){const r=await call('api_getGradebook',{offering_id:document.getElementById('gradeOffering').value});const topics=r.data.topics;const rows=r.data.rows;document.getElementById('gradeTable').innerHTML='<thead><tr>'+['เลขที่','รหัส','ชื่อ','เข้าเรียน','สมุด','ส่งงาน','พิเศษ','รวม','ส่งแล้ว','ขาดส่ง','รอตรวจ','ยกเลิก'].concat(topics.map(t=>t.display_topic_name)).map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+[row.student_no,row.student_id,row.student_name,row.attendance_score,row.book_score,row.submission_score,row.manual_score,row.total_score,row.submitted_count,row.missing_count,row.pending_review_count,row.voided_count].concat(topics.map(t=>row.topic_status[t.topic_id]||'-')).map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody>';}
-async function regenRoomSheetsUI(){const r=await call('api_regenerateRoomSheets');toast('สร้างชีทรายห้องแล้ว');}
-async function archiveTermUI(){if(!confirm('ยืนยันสร้าง Archive ภาคเรียนปัจจุบัน?'))return;const r=await call('api_createTermArchive','');document.getElementById('archiveResult').textContent=pretty(r.data);}
-</script>
+<?!= include('utils'); ?>
 </body>
 </html>

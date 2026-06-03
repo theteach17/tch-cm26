@@ -1,5 +1,6 @@
 function listDiscoveredTopics(payload) {
   payload = payload || {};
+  validate_(payload, { class_code: { maxLen: 20 }, startRow: { type: 'number' }, endRow: { type: 'number' } });
   const source = getActiveSource_();
   if (!source) throw new Error('No active source form');
   if (!getRows_(SHEETS.FORM_HEADER_MAP).some(r => String(r.source_id) === String(source.source_id))) detectFormHeaders();
@@ -31,10 +32,12 @@ function listDiscoveredTopics(payload) {
 function createOrUpdateTopicMap(payload) {
   assertRole_(['ADMIN','TEACHER']);
   payload = payload || {};
+  validate_(payload, { class_code: { required: true, maxLen: 20 }, form_topic_text: { required: true, maxLen: 300 }, display_topic_name: { maxLen: 300 }, score: { type: 'number' }, assigned_date: { maxLen: 20 }, sync_mode: { maxLen: 40 } });
   const termId = payload.term_id || getActiveTerm_();
   const classCode = String(payload.class_code || '').trim();
   const offering = payload.offering_id ? getOffering_(payload.offering_id) : buildOfferingMap_()[[termId, classCode].join('|')];
   if (!offering) throw new Error('Course offering not found for class ' + classCode + ' in ' + termId);
+  assertOfferingAccess_(offering.offering_id);
   const topicId = payload.topic_id || ('TOPIC-' + digest_([termId, offering.offering_id, classCode, payload.form_topic_text].join('|'), 18));
   const row = {
     topic_id: topicId, term_id: termId, offering_id: offering.offering_id, class_code: classCode,
@@ -51,6 +54,7 @@ function createOrUpdateTopicMap(payload) {
 }
 function previewRetroactiveImport(payload) {
   payload = payload || {};
+  validate_(payload, { class_code: { required: true, maxLen: 20 }, form_topic_text: { required: true, maxLen: 300 }, start_date: { maxLen: 20 }, end_date: { maxLen: 20 } });
   const source = getActiveSource_();
   if (!source) throw new Error('No active source form');
   const classCode = String(payload.class_code || '').trim();
@@ -95,6 +99,7 @@ function groupHeaderMapsByClass_(maps) {
 function remapAndScoreExistingSubmissions(topicId) {
   const topic = findOne_(SHEETS.TOPIC_MAP, r => String(r.topic_id) === String(topicId));
   if (!topic) throw new Error('Topic not found: ' + topicId);
+  if (topic.offering_id) assertOfferingAccess_(topic.offering_id);
   const rows = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(r =>
     String(r.term_id) === String(topic.term_id) && String(r.class_code) === String(topic.class_code) &&
     normalizeText_(r.form_topic_text) === normalizeText_(topic.form_topic_text)
@@ -115,21 +120,28 @@ function remapAndScoreExistingSubmissions(topicId) {
 }
 function listSubmissionsForReview(filters) {
   filters = filters || {};
+  validate_(filters, { class_code: { maxLen: 20 }, topic_id: { maxLen: 80 }, review_status: { maxLen: 40 }, limit: { type: 'number' }, offset: { type: 'number' } });
   let rows = getRows_(SHEETS.NORMALIZED_SUBMISSIONS);
   if (filters.term_id) rows = rows.filter(r => String(r.term_id) === String(filters.term_id)); else rows = rows.filter(r => String(r.term_id) === getActiveTerm_());
   if (filters.class_code) rows = rows.filter(r => String(r.class_code) === String(filters.class_code));
   if (filters.topic_id) rows = rows.filter(r => String(r.topic_id) === String(filters.topic_id));
   if (filters.review_status) rows = rows.filter(r => String(r.review_status) === String(filters.review_status));
   if (filters.form_topic_text) rows = rows.filter(r => normalizeText_(r.form_topic_text) === normalizeText_(filters.form_topic_text));
-  const files = getRows_(SHEETS.SUBMISSION_FILES);
+  const offset = Math.max(0, Number(filters.offset || 0));
+  const limit = Math.max(1, Math.min(Number(filters.limit || getSetting_('REVIEW_PAGE_SIZE') || APP.REVIEW_PAGE_SIZE || 30), 60));
+  const pageRows = rows.slice(offset, offset + limit);
+  const pageIds = new Set(pageRows.map(r => String(r.submission_id)));
+  const files = getRows_(SHEETS.SUBMISSION_FILES).filter(f => pageIds.has(String(f.submission_id)));
   const bySub = {};
   files.forEach(f => { (bySub[f.submission_id] = bySub[f.submission_id] || []).push(f); });
-  return ok_(rows.slice(0, Number(filters.limit || 200)).map(r => Object.assign({}, r, { files: bySub[r.submission_id] || [] })), 'Submissions loaded');
+  return ok_({ rows: pageRows.map(r => Object.assign({}, r, { files: bySub[r.submission_id] || [] })), offset, limit, total: rows.length, hasMore: offset + limit < rows.length }, 'Submissions loaded');
 }
 function reviewSubmission(submissionId, action, reason, note) {
   assertRole_(['ADMIN','TEACHER']);
+  validate_({ submissionId, action, reason: reason || '', note: note || '' }, { submissionId: { required: true, maxLen: 80 }, action: { required: true, allowed: Object.keys(REVIEW_ACTIONS).map(k => REVIEW_ACTIONS[k]) }, reason: { maxLen: 300 }, note: { maxLen: 500 } });
   const sub = findOne_(SHEETS.NORMALIZED_SUBMISSIONS, r => String(r.submission_id) === String(submissionId));
   if (!sub) throw new Error('Submission not found: ' + submissionId);
+  if (sub.offering_id) assertOfferingAccess_(sub.offering_id);
   const oldReview = sub.review_status, oldScore = sub.score_status;
   let newReview = oldReview, newScore = oldScore, ledgerStatus = null, voidReason = '';
   switch (action) {
@@ -151,7 +163,7 @@ function reviewSubmission(submissionId, action, reason, note) {
 }
 
 /**
- * v1.3 automation: create TopicMap automatically from existing pending submissions,
+ * v1.4.0 production-audit: create TopicMap automatically from existing pending submissions,
  * re-score them, update files, and resolve noisy TOPIC_NOT_MAPPED errors.
  * This is safe to run repeatedly; it is idempotent by topic_id and score source_ref.
  */

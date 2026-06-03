@@ -1,18 +1,25 @@
 /**
  * Classroom Management Ledger System
- * Production-oriented Google Apps Script + Google Sheets Web App
- * Version: 1.0.0
- * Author: ChatGPT Senior Software Engineer Blueprint Implementation
+ * Production-hardened Google Apps Script + Google Sheets Web App
+ * Version: 1.4.0-production-audit
+ *
+ * IMPORTANT SECURITY NOTE:
+ * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
+ * the Apps Script editor by running setDbSpreadsheetId('<DB_ID>') and then
+ * initializeSystem({ sourceSpreadsheetId:'<FORM_RESPONSE_ID>' }) or by editing
+ * SystemConfig / SourceForms in the secured database spreadsheet.
  */
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.3.0-auto-topic-repair',
+  VERSION: '1.4.0-production-audit',
   TIMEZONE: 'Asia/Bangkok',
-  DEFAULT_DB_SPREADSHEET_ID: '1Xs7L1kxtUBDcXiXcYXhStDEaxGV2SdUaZZa9QnbVdpo',
-  DEFAULT_SOURCE_SPREADSHEET_ID: '1P8MJ8PPzXg9TkApNl529NOj8UverQ-5hV498Hk0TXpQ',
+  DEFAULT_DB_SPREADSHEET_ID: '',
+  DEFAULT_SOURCE_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SHEET_NAME: 'Form Responses 1',
-  ACTIVE_TERM_ID: 'AY2569-T1'
+  ACTIVE_TERM_ID: 'AY2569-T1',
+  REVIEW_PAGE_SIZE: 30,
+  MAX_SCAN_RETRY: 5
 });
 
 const STATUS = Object.freeze({

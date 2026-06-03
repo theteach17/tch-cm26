@@ -16,6 +16,7 @@ function initializeSystem(options) {
     Object.keys(SCHEMA).forEach(name => ensureSheet_(name, SCHEMA[name]));
     seedDefaults_(options);
     protectCoreHeaders_();
+    invalidateStudentCache_();
     audit_('INITIALIZE_SYSTEM', 'SYSTEM', ss.getId(), {}, { version: APP.VERSION }, 'System initialized/repaired');
     return ok_({ spreadsheetId: ss.getId(), url: ss.getUrl(), version: APP.VERSION }, 'System initialized successfully');
   } finally {
@@ -30,8 +31,8 @@ function seedDefaults_(options) {
     ['APP_VERSION', APP.VERSION, 'text', 'Application version'],
     ['ACTIVE_TERM_ID', activeTerm, 'text', 'Current active term'],
     ['TIMEZONE', 'Asia/Bangkok', 'text', 'System timezone'],
-    ['SOURCE_FORM_SPREADSHEET_ID', options.sourceSpreadsheetId || APP.DEFAULT_SOURCE_SPREADSHEET_ID, 'text', 'Google Form response spreadsheet ID'],
-    ['SOURCE_FORM_SHEET_NAME', options.sourceSheetName || APP.DEFAULT_SOURCE_SHEET_NAME, 'text', 'Google Form response sheet name'],
+    ['SOURCE_FORM_SPREADSHEET_ID', options.sourceSpreadsheetId || getSetting_('SOURCE_FORM_SPREADSHEET_ID') || '', 'text', 'Google Form response spreadsheet ID'],
+    ['SOURCE_FORM_SHEET_NAME', options.sourceSheetName || getSetting_('SOURCE_FORM_SHEET_NAME') || APP.DEFAULT_SOURCE_SHEET_NAME, 'text', 'Google Form response sheet name'],
     ['ATTENDANCE_SCORE_START_DATE', '2026-06-01', 'date', 'Start date for attendance scoring'],
     ['DEFAULT_ATTENDANCE_SCORE', '0.5', 'number', 'Default attendance score per session'],
     ['DEFAULT_SUBMISSION_SCORE', '1', 'number', 'Default score for valid submission'],
@@ -42,7 +43,9 @@ function seedDefaults_(options) {
     ['AUTO_CREATE_TOPICS_FROM_FORM', 'TRUE', 'boolean', 'Automatically create TopicMap for new Google Form topics during sync'],
     ['AUTO_RESOLVE_TOPIC_ERRORS', 'TRUE', 'boolean', 'Automatically mark TOPIC_NOT_MAPPED errors as resolved after auto-mapping'],
     ['AUTO_CREATE_CLASSES_OFFERINGS', 'TRUE', 'boolean', 'Automatically create class and course offering when a class appears in Form data'],
-    ['TOPIC_NOT_MAPPED_LOG_MODE', 'SUMMARY', 'text', 'SUMMARY avoids one error row per student for missing topics']
+    ['TOPIC_NOT_MAPPED_LOG_MODE', 'SUMMARY', 'text', 'SUMMARY avoids one error row per student for missing topics'],
+    ['REVIEW_PAGE_SIZE', String(APP.REVIEW_PAGE_SIZE), 'number', 'Default review page size'],
+    ['MAX_SCAN_RETRY', String(APP.MAX_SCAN_RETRY), 'number', 'Client scan retry limit']
   ];
   defaults.forEach(d => setSetting_(d[0], d[1], d[2], d[3]));
 
@@ -77,11 +80,14 @@ function seedDefaults_(options) {
     });
   });
 
+  const sourceSpreadsheetId = options.sourceSpreadsheetId || getSetting_('SOURCE_FORM_SPREADSHEET_ID') || '';
+  const sourceSheetName = options.sourceSheetName || getSetting_('SOURCE_FORM_SHEET_NAME') || APP.DEFAULT_SOURCE_SHEET_NAME;
   upsertByKey_(SHEETS.SOURCE_FORMS, 'source_id', {
     source_id: 'FORM-MAIN-' + activeTerm, term_id: activeTerm, source_name: 'แบบฟอร์มส่งงานในชั้นเรียน',
-    spreadsheet_id: getSetting_('SOURCE_FORM_SPREADSHEET_ID') || APP.DEFAULT_SOURCE_SPREADSHEET_ID,
-    sheet_name: getSetting_('SOURCE_FORM_SHEET_NAME') || APP.DEFAULT_SOURCE_SHEET_NAME,
-    header_row: 1, is_active: true, last_sync_row: 1, last_sync_time: '', note: 'Read-only source form response sheet'
+    spreadsheet_id: sourceSpreadsheetId,
+    sheet_name: sourceSheetName,
+    header_row: 1, is_active: !!sourceSpreadsheetId, last_sync_row: 1, last_sync_time: '',
+    note: sourceSpreadsheetId ? 'Read-only source form response sheet' : 'Pending secure source spreadsheet ID configuration'
   });
 }
 

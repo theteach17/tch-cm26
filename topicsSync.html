@@ -1,0 +1,36 @@
+<section id="topics" class="section">
+  <h3>หัวข้องาน / นำเข้าย้อนหลัง</h3>
+  <div class="card p-3 mb-3">
+    <div class="row g-3">
+      <div class="col-md-3"><label class="form-label">ห้อง</label><select id="topicClass" class="form-select"></select></div>
+      <div class="col-md-5"><label class="form-label">หัวข้อใน Google Form</label><input id="topicFormText" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">ชื่อแสดงผล</label><input id="topicDisplay" class="form-control"></div>
+      <div class="col-md-1"><label class="form-label">คะแนน</label><input id="topicScore" class="form-control" value="1"></div>
+      <div class="col-md-3"><label class="form-label">วันที่มอบหมาย</label><input id="topicAssigned" type="date" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">โหมด</label><select id="topicSyncMode" class="form-select"><option>LIVE</option><option>RETROACTIVE</option></select></div>
+      <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-info w-100" onclick="discoverTopicsUI()">ค้นหัวข้อจริงจาก Form</button></div>
+      <div class="col-md-3 d-flex align-items-end"><button class="btn btn-success w-100" onclick="saveTopicUI()">บันทึกหัวข้อ</button></div>
+      <div class="col-md-6 d-flex align-items-end"><button class="btn btn-warning w-100" onclick="autoMapTopicsUI()">สร้างหัวข้องานอัตโนมัติจากรายการที่ Sync แล้ว</button></div>
+    </div>
+  </div>
+  <div class="card p-3"><div id="topicResults"></div></div>
+</section>
+<section id="sync" class="section">
+  <h3>ดึงข้อมูลจาก Google Form</h3>
+  <div class="card p-3">
+    <button class="btn btn-primary" onclick="syncNewUI()">Sync เฉพาะรายการใหม่</button>
+    <button class="btn btn-warning" onclick="syncAllUI()">Sync ทั้งหมด / Rebuild จากต้นทาง</button>
+    <button class="btn btn-success" onclick="autoRepairUI()">Auto Fix หัวข้อ/คะแนน/Error</button>
+    <div id="syncProgress" class="mt-3"></div>
+    <pre id="syncResult" class="mt-3"></pre>
+  </div>
+</section>
+<script>
+async function discoverTopicsUI(){return runUiAction('discoverTopicsUI',async()=>{const cls=document.getElementById('topicClass').value;const r=await call('api_listDiscoveredTopics',{class_code:cls});document.getElementById('topicResults').innerHTML='<div class="table-responsive"><table class="table table-sm"><thead><tr><th>ห้อง</th><th>หัวข้อ</th><th>จำนวน</th><th></th></tr></thead><tbody>'+r.data.map(t=>`<tr><td>${escapeHtml(t.class_text)}</td><td>${escapeHtml(t.form_topic_text)}</td><td>${t.count}</td><td><button class="btn btn-sm btn-outline-primary" onclick="pickTopic('${escapeAttr(t.class_code)}', decodeURIComponent('${encodeURIComponent(t.form_topic_text)}'))">เลือก</button></td></tr>`).join('')+'</tbody></table></div>';});}
+function pickTopic(cls,topic){document.getElementById('topicClass').value=cls;document.getElementById('topicFormText').value=topic;document.getElementById('topicDisplay').value=topic;}
+async function saveTopicUI(){return runUiAction('saveTopicUI',async()=>{const r=await call('api_createTopicMap',{class_code:document.getElementById('topicClass').value,form_topic_text:document.getElementById('topicFormText').value,display_topic_name:document.getElementById('topicDisplay').value,score:document.getElementById('topicScore').value,assigned_date:document.getElementById('topicAssigned').value,sync_mode:document.getElementById('topicSyncMode').value,import_now:true});document.getElementById('topicResults').innerHTML='<pre>'+escapeHtml(pretty(r.data))+'</pre>';toast('บันทึกหัวข้อแล้ว');});}
+async function autoMapTopicsUI(){return runUiAction('autoMapTopicsUI',async()=>{const r=await call('api_autoMapAndReprocessTopics',{});document.getElementById('topicResults').innerHTML='<pre>'+escapeHtml(pretty(r.data))+'</pre>';toast('สร้างหัวข้ออัตโนมัติแล้ว');});}
+async function syncNewUI(){return runUiAction('syncNewUI',async()=>{const box=document.getElementById('syncResult');box.textContent='กำลัง Sync รายการใหม่...';const r=await call('api_syncNewFormRows');const fix=await call('api_autoMapAndReprocessTopics',{});box.textContent=pretty({sync:r.data,autoFix:fix.data});toast('Sync รายการใหม่เสร็จแล้ว');});}
+function renderProgress(d,total){const percent=Number(d.percent||0);document.getElementById('syncProgress').innerHTML=`<div class="progress mb-2"><div class="progress-bar" style="width:${Math.min(100,percent)}%">${percent}%</div></div><small>ประมวลผลถึงแถว ${d.endRow||'-'}/${d.lastRow||'-'} | นำเข้า: ${total.imported} | ส่งงาน: ${total.normalized} | คะแนน: ${total.scores} | Error: ${total.errors}</small>`;}
+async function syncAllUI(){return runUiAction('syncAllUI',async()=>{const ok=await confirmAction('Sync ทั้งหมด / Rebuild','ระบบจะประมวลผลข้อมูลจาก Google Form ใหม่แบบแบ่งชุด เพื่อป้องกัน Timeout ต้องการดำเนินการหรือไม่');if(!ok)return;const box=document.getElementById('syncResult');const total={imported:0,normalized:0,files:0,scores:0,errors:0};let startRow=null,hasMore=true,round=0,last=null;while(hasMore){round++;box.textContent='กำลัง Sync ชุดที่ '+round+' ...\n'+pretty(total);const r=await call('api_syncAllFormRowsChunk',{start_row:startRow,chunk_size:80,reset_cursor:round===1});const d=r.data||{};last=d;['imported','normalized','files','scores','errors'].forEach(k=>total[k]+=Number(d[k]||0));hasMore=!!d.hasMore;startRow=d.nextStartRow;renderProgress(d,total);await sleep(250);}box.textContent='Sync ทั้งหมดเสร็จแล้ว กำลัง Auto Fix หัวข้อ/คะแนน/Error...\n'+pretty({summary:total,lastChunk:last});const fix=await call('api_autoMapAndReprocessTopics',{});box.textContent='Sync ทั้งหมดและ Auto Fix เสร็จแล้ว\n'+pretty({summary:total,lastChunk:last,autoFix:fix.data});toast('Sync ทั้งหมดเสร็จแล้ว');});}
+</script>

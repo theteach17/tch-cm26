@@ -14,6 +14,7 @@ function safeJson_(obj) { try { return JSON.stringify(obj || {}); } catch (err) 
 function parseJson_(s, fallback) { try { return JSON.parse(s || ''); } catch (err) { return fallback || {}; } }
 function getUserEmail_() { return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || 'unknown'; }
 function cleanId_(v) { return String(v || '').trim().replace(/\.0$/, ''); }
+function cleanString_(v, maxLen) { return String(v === undefined || v === null ? '' : v).trim().slice(0, maxLen || 500); }
 function extractDriveFileId_(url) {
   const s = String(url || '').trim();
   if (!s) return '';
@@ -52,3 +53,74 @@ function lock_(timeoutMs) {
 }
 function ok_(data, message) { return { ok: true, message: message || 'success', data: data || null }; }
 function fail_(message, data) { return { ok: false, message: message || 'error', data: data || null }; }
+
+function validate_(payload, rules) {
+  payload = payload || {};
+  const errors = [];
+  Object.keys(rules || {}).forEach(field => {
+    const rule = rules[field] || {};
+    const val = payload[field];
+    if (rule.required && (val === undefined || val === null || String(val).trim() === '')) errors.push(field + ' is required');
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+      if (rule.type === 'number' && isNaN(Number(val))) errors.push(field + ' must be numeric');
+      if (rule.type === 'boolean' && ['TRUE','FALSE','true','false','1','0',true,false,1,0].indexOf(val) < 0) errors.push(field + ' must be boolean');
+      if (rule.maxLen && String(val).length > rule.maxLen) errors.push(field + ' too long');
+      if (rule.pattern && !rule.pattern.test(String(val))) errors.push(field + ' has invalid format');
+      if (rule.allowed && rule.allowed.indexOf(String(val)) < 0) errors.push(field + ' has unsupported value');
+    }
+  });
+  if (errors.length) throw new Error('Validation failed: ' + errors.join(', '));
+  return payload;
+}
+function validateSpreadsheetId_(id, fieldName) {
+  const value = cleanString_(id, 200);
+  if (!value) throw new Error((fieldName || 'spreadsheet_id') + ' is required');
+  if (!/^[a-zA-Z0-9_-]{20,}$/.test(value)) throw new Error((fieldName || 'spreadsheet_id') + ' has invalid format');
+  return value;
+}
+
+function cacheGetJson_(key) {
+  try {
+    const raw = CacheService.getScriptCache().get(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) { return null; }
+}
+function cachePutJson_(key, value, seconds) {
+  try {
+    const raw = JSON.stringify(value || null);
+    if (raw.length < 95000) CacheService.getScriptCache().put(key, raw, seconds || 300);
+  } catch (err) { console.warn('cachePut skipped for ' + key, err); }
+}
+function cacheRemove_(key) { try { CacheService.getScriptCache().remove(key); } catch (err) {} }
+function cacheKey_(prefix, parts) { return prefix + ':' + (Array.isArray(parts) ? parts.join('|') : String(parts || '')); }
+
+function getCachedStudentMap_() {
+  const key = 'STUDENT_MAP_V2';
+  const cached = cacheGetJson_(key);
+  if (cached) return cached;
+  const map = buildStudentMap_();
+  cachePutJson_(key, map, 300);
+  return map;
+}
+function invalidateStudentCache_() { cacheRemove_('STUDENT_MAP_V2'); }
+
+function getCachedEnrollmentsByOffering_(offeringId) {
+  const key = cacheKey_('ENROLLMENTS_BY_OFFERING_V2', offeringId);
+  const cached = cacheGetJson_(key);
+  if (cached) return cached;
+  const rows = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === String(offeringId) && String(r.enrollment_status) === 'ACTIVE');
+  cachePutJson_(key, rows, 300);
+  return rows;
+}
+function invalidateEnrollmentCache_(offeringId) { if (offeringId) cacheRemove_(cacheKey_('ENROLLMENTS_BY_OFFERING_V2', offeringId)); }
+
+function getCachedAttendanceIndexBySession_(sessionId) {
+  const key = cacheKey_('ATTENDANCE_INDEX_SESSION_V2', sessionId);
+  const cached = cacheGetJson_(key);
+  if (cached) return cached;
+  const rows = getRows_(SHEETS.ATTENDANCE_INDEX).filter(r => String(r.session_id) === String(sessionId));
+  cachePutJson_(key, rows, 120);
+  return rows;
+}
+function updateAttendanceIndexCache_(sessionId, rows) { cachePutJson_(cacheKey_('ATTENDANCE_INDEX_SESSION_V2', sessionId), rows || [], 120); }
+function invalidateAttendanceIndexCache_(sessionId) { if (sessionId) cacheRemove_(cacheKey_('ATTENDANCE_INDEX_SESSION_V2', sessionId)); }

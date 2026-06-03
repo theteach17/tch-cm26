@@ -1,0 +1,48 @@
+<section id="session" class="section">
+  <h3>เปิดคาบเรียน</h3>
+  <div class="card p-3">
+    <div class="row g-3">
+      <div class="col-md-4"><label class="form-label">ห้อง/รายวิชา</label><select id="sessionOffering" class="form-select"></select></div>
+      <div class="col-md-2"><label class="form-label">วันที่</label><input id="sessionDate" type="date" class="form-control"></div>
+      <div class="col-md-2"><label class="form-label">คาบที่</label><input id="periodNo" class="form-control" placeholder="เช่น 3"></div>
+      <div class="col-md-4"><label class="form-label">หัวข้อการสอน</label><input id="lessonTitle" class="form-control" placeholder="เช่น Prefix Practice"></div>
+      <div class="col-md-6"><label class="form-label">หัวข้อใน Google Form</label><input id="formTopicText" class="form-control" placeholder="เช่น Prefix - 29 May 2026"></div>
+      <div class="col-md-2"><label class="form-label">คะแนนงาน</label><input id="submissionScore" type="number" step="0.1" class="form-control" value="1"></div>
+      <div class="col-md-2 form-check mt-5"><input id="attendanceEnabled" class="form-check-input" type="checkbox" checked><label class="form-check-label">เช็กชื่อ</label></div>
+      <div class="col-md-2 form-check mt-5"><input id="bookCheckEnabled" class="form-check-input" type="checkbox"><label class="form-check-label">ตรวจสมุด</label></div>
+    </div>
+    <button class="btn btn-success mt-3" onclick="startSessionUI()">เริ่มคาบเรียน</button>
+  </div>
+  <div id="sessionResult" class="mt-3"></div>
+</section>
+<section id="attendance" class="section">
+  <h3>สแกนบัตรลงชื่อเข้าชั้นเรียน</h3>
+  <div class="card p-3 mb-3">
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">เลือกคาบที่เปิดอยู่</label><select id="scanSession" class="form-select" onchange="loadScanBootstrapUI()"></select></div>
+      <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-primary w-100" onclick="loadActiveSessionsUI()">โหลดคาบ</button></div>
+      <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-danger w-100" onclick="markAbsentUI()">ปิดยอดขาดเรียน</button></div>
+    </div>
+  </div>
+  <div class="card p-3">
+    <input id="scanInput" class="form-control scan-box" placeholder="แตะบัตรหรือพิมพ์เลขประจำตัว แล้วกด Enter" autocomplete="off">
+    <div class="mt-2 small-muted">ระบบแสดงผลทันทีจากข้อมูล preload และส่งขึ้น server เป็น batch พร้อม retry แบบจำกัดรอบ</div>
+    <div id="scanOfflineWarning" class="offline-box mt-3 d-none"></div>
+    <div class="row mt-3"><div class="col"><div class="badge badge-soft fs-6">มาแล้ว <span id="presentCount">0</span></div></div><div class="col"><div class="badge text-bg-light fs-6">ค้างส่ง server <span id="pendingScanCount">0</span></div></div><div class="col"><div class="badge text-bg-warning fs-6">Retry <span id="scanRetryCount">0</span></div></div></div>
+    <hr><div id="scanLog"></div>
+  </div>
+</section>
+<script>
+async function startSessionUI(){return runUiAction('startSessionUI',async()=>{const r=await call('api_startSession',{offering_id:document.getElementById('sessionOffering').value,session_date:document.getElementById('sessionDate').value,period_no:document.getElementById('periodNo').value,lesson_title:document.getElementById('lessonTitle').value,form_topic_text:document.getElementById('formTopicText').value,submission_score:document.getElementById('submissionScore').value,attendance_enabled:document.getElementById('attendanceEnabled').checked,book_check_enabled:document.getElementById('bookCheckEnabled').checked});document.getElementById('sessionResult').innerHTML=`<div class="alert alert-success">เริ่มคาบแล้ว: ${escapeHtml(r.data.session.session_id)}</div>`;await loadActiveSessionsUI();});}
+async function closeSessionUI(id){return runUiAction('closeSessionUI',async()=>{await call('api_closeSession',id);toast('ปิดคาบแล้ว');await loadDashboard();await loadActiveSessionsUI();});}
+async function loadActiveSessionsUI(){return runUiAction('loadActiveSessionsUI',async()=>{const r=await call('api_getActiveSessions');state.activeSessions=r.data||[];const opts=state.activeSessions.map(s=>`<option value="${escapeAttr(s.session_id)}">${escapeHtml(s.class_code)} | ${escapeHtml(s.session_date)} | คาบ ${escapeHtml(s.period_no)} | ${escapeHtml(s.lesson_title||'')}</option>`).join('');['scanSession','scoreSession'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});});}
+async function loadScanBootstrapUI(){return runUiAction('loadScanBootstrapUI',async()=>{const sid=document.getElementById('scanSession').value;if(!sid)return;const r=await call('api_getScanBootstrap',sid);state.scan.sessionId=sid;state.scan.idMap=r.data.idMap||{};state.scan.rfidMap=r.data.rfidMap||{};state.scan.present=r.data.present||{};state.scan.retryCount=0;document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;document.getElementById('scanRetryCount').textContent='0';document.getElementById('scanOfflineWarning').classList.add('d-none');document.getElementById('scanInput').focus();toast('โหลดข้อมูลสแกนแล้ว');});}
+function handleScan(raw){raw=String(raw||'').trim();if(!raw||!state.scan.sessionId)return;const st=state.scan.rfidMap[raw]||state.scan.idMap[raw];let msg='',cls='';if(!st){msg='ไม่พบข้อมูล: '+raw;cls='danger';}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning';}else{state.scan.present[st.student_id]=true;msg='เช็กชื่อ: '+st.name;cls='success';}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;prependScanLog(cls,msg);state.scan.pending.push({raw,received_at:new Date().toISOString(),client_id:'web'});updatePendingScanCount();if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,800);}
+function prependScanLog(cls,msg){const log=document.getElementById('scanLog');log.insertAdjacentHTML('afterbegin',`<div class="alert alert-${cls} py-2 mb-2">${new Date().toLocaleTimeString()} — ${escapeHtml(msg)}</div>`);while(log.children.length>30)log.lastElementChild.remove();}
+function updatePendingScanCount(){document.getElementById('pendingScanCount').textContent=state.scan.pending.length;document.getElementById('scanRetryCount').textContent=state.scan.retryCount||0;}
+async function flushScans(){const batch=state.scan.pending.splice(0,20);state.scan.timer=null;updatePendingScanCount();if(!batch.length)return;try{const r=await call('api_processScanBatch',state.scan.sessionId,batch,{silentLoading:true});state.scan.retryCount=0;(r.data.results||[]).forEach(x=>{if(!x.ok)prependScanLog('danger',`Server: ${x.message} (${x.raw})`);});}catch(e){state.scan.pending=batch.concat(state.scan.pending);state.scan.retryCount=(state.scan.retryCount||0)+1;updatePendingScanCount();if(state.scan.retryCount>=state.maxScanRetry){showOfflineWarning();return;}const delay=Math.min(800*Math.pow(2,state.scan.retryCount),30000);state.scan.timer=setTimeout(flushScans,delay);return;}if(state.scan.pending.length&&!state.scan.timer)state.scan.timer=setTimeout(flushScans,800);}
+function showOfflineWarning(){const box=document.getElementById('scanOfflineWarning');box.classList.remove('d-none');box.innerHTML=`<b>หยุดส่งข้อมูลชั่วคราว</b><br>ระบบพยายามส่งข้อมูลแล้ว ${state.scan.retryCount} ครั้ง แต่ยังไม่สำเร็จ ข้อมูลค้างจะยังอยู่ในหน้าเว็บนี้ กรุณาตรวจอินเทอร์เน็ตแล้วกด Retry<br><button class="btn btn-sm btn-warning mt-2" onclick="retryScanNow()">Retry now</button> <button class="btn btn-sm btn-outline-secondary mt-2" onclick="exportPendingScans()">Export scan log</button><pre class="mt-2">${escapeHtml(JSON.stringify(state.scan.pending,null,2))}</pre>`;toast('ส่งข้อมูลสแกนไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต','danger');}
+function retryScanNow(){state.scan.retryCount=0;document.getElementById('scanOfflineWarning').classList.add('d-none');if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,100);}
+function exportPendingScans(){const data=JSON.stringify(state.scan.pending,null,2);navigator.clipboard&&navigator.clipboard.writeText(data);alert(data);}
+async function markAbsentUI(){return runUiAction('markAbsentUI',async()=>{const sid=document.getElementById('scanSession').value;if(!sid)return;const ok=await confirmAction('ปิดยอดขาดเรียน','ระบบจะบันทึกนักเรียนที่ยังไม่สแกนเป็นขาดเรียน ยืนยันหรือไม่');if(!ok)return;const r=await call('api_markAbsentForSession',sid);toast('บันทึกขาดเรียน '+r.data.absent+' คน');});}
+</script>

@@ -1,9 +1,18 @@
 function startSession(payload) {
   assertRole_(['ADMIN','TEACHER']);
+  validate_(payload || {}, {
+    offering_id: { maxLen: 120 },
+    class_code: { maxLen: 20 },
+    period_no: { maxLen: 20 },
+    lesson_title: { maxLen: 200 },
+    form_topic_text: { maxLen: 300 },
+    submission_score: { type: 'number' }
+  });
   payload = payload || {};
   const termId = payload.term_id || getActiveTerm_();
   const offering = getOffering_(payload.offering_id) || buildOfferingMap_()[[termId, payload.class_code].join('|')];
   if (!offering) throw new Error('Offering not found for class ' + payload.class_code);
+  assertOfferingAccess_(offering.offering_id);
   let topicId = payload.topic_id || '';
   if (payload.form_topic_text && !topicId) {
     const topicResult = createOrUpdateTopicMap({
@@ -29,6 +38,10 @@ function startSession(payload) {
 }
 function closeSession(sessionId) {
   assertRole_(['ADMIN','TEACHER']);
+  validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
+  const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
+  if (!session) throw new Error('Session not found: ' + sessionId);
+  assertOfferingAccess_(session.offering_id);
   const ok = updateRowById_(SHEETS.SESSIONS, 'session_id', sessionId, { status:'CLOSED', closed_at: now_() });
   if (!ok) throw new Error('Session not found: ' + sessionId);
   audit_('CLOSE_SESSION', SHEETS.SESSIONS, sessionId, {}, { status:'CLOSED' }, 'Session closed');
@@ -36,15 +49,18 @@ function closeSession(sessionId) {
 }
 function getActiveSessions() {
   const termId = getActiveTerm_();
-  return ok_(getRows_(SHEETS.SESSIONS).filter(r => String(r.term_id) === termId && String(r.status) === 'ACTIVE'), 'Active sessions loaded');
+  const offeringIds = new Set(listActiveOfferings().map(o => String(o.offering_id)));
+  return ok_(getRows_(SHEETS.SESSIONS).filter(r => String(r.term_id) === termId && String(r.status) === 'ACTIVE' && offeringIds.has(String(r.offering_id))), 'Active sessions loaded');
 }
 function getSessionDetail(sessionId) {
+  validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
   const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
   if (!session) throw new Error('Session not found');
+  assertOfferingAccess_(session.offering_id);
   const offering = getOffering_(session.offering_id);
-  const enrollments = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === String(session.offering_id) && String(r.enrollment_status) === 'ACTIVE');
-  const studentsById = buildStudentMap_().byId;
-  const attendance = getRows_(SHEETS.ATTENDANCE_INDEX).filter(r => String(r.session_id) === String(sessionId));
+  const enrollments = getCachedEnrollmentsByOffering_(session.offering_id);
+  const studentsById = getCachedStudentMap_().byId;
+  const attendance = getCachedAttendanceIndexBySession_(sessionId);
   return ok_({ session, offering, roster: enrollments.map(e => Object.assign({}, e, { student: studentsById[cleanId_(e.student_id)] || {} })), attendance }, 'Session detail loaded');
 }
 function getScanBootstrap(sessionId) {
@@ -58,66 +74,111 @@ function getScanBootstrap(sessionId) {
   detail.attendance.forEach(a => present[cleanId_(a.student_id)] = true);
   return ok_({ session: detail.session, roster: Object.values(idMap), rfidMap, idMap, present }, 'Scan bootstrap loaded');
 }
+function loadScanContext_(sessionId) {
+  const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
+  if (!session) throw new Error('Session not found: ' + sessionId);
+  if (String(session.status) !== 'ACTIVE') throw new Error('Session is not ACTIVE');
+  assertOfferingAccess_(session.offering_id);
+  const students = getCachedStudentMap_();
+  const enrollments = getCachedEnrollmentsByOffering_(session.offering_id);
+  const enrolledIds = new Set(enrollments.map(e => cleanId_(e.student_id)));
+  const currentIndex = getCachedAttendanceIndexBySession_(sessionId);
+  const idxByStudent = {};
+  currentIndex.forEach(i => idxByStudent[cleanId_(i.student_id)] = i);
+  return {
+    session,
+    students,
+    enrolledIds,
+    currentIndex,
+    idxByStudent,
+    termId: session.term_id,
+    startDate: getSetting_('ATTENDANCE_SCORE_START_DATE') || '1900-01-01',
+    defaultScore: numericOrZero_(getSetting_('DEFAULT_ATTENDANCE_SCORE') || 0.5),
+    now: now_()
+  };
+}
+function processSingleScan_(scan, ctx) {
+  const raw = cleanId_(scan.raw || scan.raw_scan_value || scan);
+  const queueId = uuid_('SCAN');
+  const receivedAt = scan.received_at ? new Date(scan.received_at) : now_();
+  let result = { raw, ok:false, message:'ไม่พบข้อมูลบัตร/เลขประจำตัว', student_id:'', name:'' };
+  let attendanceRow = null, indexRow = null, scoreRow = null, indexUpdate = null;
+
+  if (!raw) {
+    result = { raw, ok:false, message:'ค่าว่าง ไม่สามารถเช็กชื่อได้', student_id:'', name:'' };
+  } else {
+    const student = ctx.students.byRfid[raw] || ctx.students.byId[raw] || null;
+    if (student) {
+      const studentId = cleanId_(student.student_id);
+      const name = student.student_name_th || student.student_name_en || '';
+      if (!ctx.enrolledIds.has(studentId)) {
+        result = { raw, ok:false, message:'พบนักเรียน แต่ไม่ได้อยู่ในห้อง/รายวิชานี้', student_id: studentId, name };
+      } else if (ctx.idxByStudent[studentId]) {
+        const old = ctx.idxByStudent[studentId];
+        const nextCount = Number(old.scan_count || 1) + 1;
+        result = { raw, ok:true, duplicate:true, message:'สแกนซ้ำ: เช็กชื่อไว้แล้ว', student_id: studentId, name };
+        indexUpdate = { attendance_id: old.attendance_id, latest_scan_time: now_(), scan_count: nextCount, status:'DUPLICATE_IGNORED' };
+        old.latest_scan_time = indexUpdate.latest_scan_time;
+        old.scan_count = nextCount;
+        old.status = 'DUPLICATE_IGNORED';
+      } else {
+        const attId = uuid_('ATT');
+        const isScored = toDateOnly_(ctx.session.session_date) >= ctx.startDate;
+        const score = isScored ? ctx.defaultScore : 0;
+        attendanceRow = { attendance_id: attId, term_id: ctx.termId, session_id: ctx.session.session_id, offering_id: ctx.session.offering_id, class_code: ctx.session.class_code, student_id: studentId, rfid_code: raw, checkin_time: now_(), checkin_method: ctx.students.byRfid[raw] ? 'RFID' : 'MANUAL_STUDENT_ID', attendance_status:'PRESENT', score, is_scored:isScored, created_by:getUserEmail_(), created_at:now_(), note:'' };
+        indexRow = { term_id: ctx.termId, session_id: ctx.session.session_id, student_id: studentId, attendance_id: attId, first_checkin_time: now_(), latest_scan_time: now_(), scan_count: 1, status:'PRESENT' };
+        if (isScored && score !== 0) scoreRow = { score_event_id: 'SCORE-' + attId, term_id: ctx.termId, event_date: toDateOnly_(ctx.session.session_date), session_id: ctx.session.session_id, offering_id: ctx.session.offering_id, class_code: ctx.session.class_code, student_id: studentId, event_type:'ATTENDANCE', score_title:'เข้าเรียน', score_delta:score, source_type:'RFID', source_ref:attId, status:'ACTIVE', void_reason:'', created_by:getUserEmail_(), created_at:now_(), updated_at:now_() };
+        ctx.idxByStudent[studentId] = Object.assign({}, indexRow);
+        ctx.currentIndex.push(Object.assign({}, indexRow));
+        result = { raw, ok:true, duplicate:false, message:'เช็กชื่อสำเร็จ', student_id: studentId, name };
+      }
+    }
+  }
+  const queueRow = { queue_id: queueId, term_id: ctx.termId, session_id: ctx.session.session_id, raw_scan_value: raw, received_at: receivedAt, client_id: scan.client_id || '', process_status: result.ok ? 'PROCESSED' : 'ERROR', processed_at: now_(), result_message: result.message, student_id: result.student_id || '', note:'' };
+  return { result, queueRow, attendanceRow, indexRow, scoreRow, indexUpdate };
+}
+function persistScanResults_(processed, ctx) {
+  const queueRows = [], attendanceRows = [], indexRows = [], scoreRows = [], indexUpdates = [];
+  processed.forEach(p => {
+    if (p.queueRow) queueRows.push(p.queueRow);
+    if (p.attendanceRow) attendanceRows.push(p.attendanceRow);
+    if (p.indexRow) indexRows.push(p.indexRow);
+    if (p.scoreRow) scoreRows.push(p.scoreRow);
+    if (p.indexUpdate) indexUpdates.push(p.indexUpdate);
+  });
+  appendObjects_(SHEETS.SCAN_QUEUE, queueRows);
+  appendObjects_(SHEETS.ATTENDANCE_LOG, attendanceRows);
+  appendObjects_(SHEETS.ATTENDANCE_INDEX, indexRows);
+  appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
+  indexUpdates.forEach(patch => updateRowById_(SHEETS.ATTENDANCE_INDEX, 'attendance_id', patch.attendance_id, patch));
+  updateAttendanceIndexCache_(ctx.session.session_id, ctx.currentIndex);
+  return { inserted: attendanceRows.length, queued: queueRows.length, scores: scoreRows.length, duplicateUpdates: indexUpdates.length };
+}
+function summarizeScanResults_(processed, persisted) {
+  const results = processed.map(p => p.result);
+  return Object.assign({ processed: results.length, duplicates: results.filter(r => r.duplicate).length, errors: results.filter(r => !r.ok).length, results }, persisted || {});
+}
 function processScanBatch(sessionId, scans) {
   assertRole_(['ADMIN','TEACHER']);
-  scans = scans || [];
+  validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
+  scans = Array.isArray(scans) ? scans.slice(0, 100) : [];
   if (!scans.length) return ok_({ processed:0, results:[] }, 'No scans');
   const lock = lock_(30000);
   try {
-    const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
-    if (!session) throw new Error('Session not found: ' + sessionId);
-    if (String(session.status) !== 'ACTIVE') throw new Error('Session is not ACTIVE');
-    const students = buildStudentMap_();
-    const enrollments = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === String(session.offering_id) && String(r.enrollment_status) === 'ACTIVE');
-    const enrolledIds = new Set(enrollments.map(e => cleanId_(e.student_id)));
-    const currentIndex = getRows_(SHEETS.ATTENDANCE_INDEX).filter(r => String(r.session_id) === String(sessionId));
-    const idxByStudent = {};
-    currentIndex.forEach(i => idxByStudent[cleanId_(i.student_id)] = i);
-    const termId = session.term_id;
-    const startDate = getSetting_('ATTENDANCE_SCORE_START_DATE') || '1900-01-01';
-    const defaultScore = numericOrZero_(getSetting_('DEFAULT_ATTENDANCE_SCORE') || 0.5);
-    const attendanceRows = [], indexRows = [], queueRows = [], scoreRows = [], results = [];
-    scans.forEach(scan => {
-      const raw = cleanId_(scan.raw || scan.raw_scan_value || scan);
-      const queueId = uuid_('SCAN');
-      const receivedAt = scan.received_at ? new Date(scan.received_at) : now_();
-      let student = students.byRfid[raw] || students.byId[raw] || null;
-      let result = { raw, ok:false, message:'ไม่พบข้อมูลบัตร/เลขประจำตัว', student_id:'', name:'' };
-      if (student) {
-        const studentId = cleanId_(student.student_id);
-        if (!enrolledIds.has(studentId)) {
-          result = { raw, ok:false, message:'พบนักเรียน แต่ไม่ได้อยู่ในห้อง/รายวิชานี้', student_id: studentId, name: student.student_name_th || student.student_name_en || '' };
-        } else if (idxByStudent[studentId]) {
-          const old = idxByStudent[studentId];
-          result = { raw, ok:true, duplicate:true, message:'สแกนซ้ำ: เช็กชื่อไว้แล้ว', student_id: studentId, name: student.student_name_th || student.student_name_en || '' };
-          updateRowById_(SHEETS.ATTENDANCE_INDEX, 'attendance_id', old.attendance_id, { latest_scan_time: now_(), scan_count: Number(old.scan_count || 1) + 1, status:'DUPLICATE_IGNORED' });
-        } else {
-          const attId = uuid_('ATT');
-          const isScored = toDateOnly_(session.session_date) >= startDate;
-          const score = isScored ? defaultScore : 0;
-          attendanceRows.push({ attendance_id: attId, term_id: termId, session_id: sessionId, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, rfid_code: raw, checkin_time: now_(), checkin_method: students.byRfid[raw] ? 'RFID' : 'MANUAL_STUDENT_ID', attendance_status:'PRESENT', score, is_scored:isScored, created_by:getUserEmail_(), created_at:now_(), note:'' });
-          indexRows.push({ term_id: termId, session_id: sessionId, student_id: studentId, attendance_id: attId, first_checkin_time: now_(), latest_scan_time: now_(), scan_count: 1, status:'PRESENT' });
-          if (isScored && score !== 0) scoreRows.push({ score_event_id: 'SCORE-' + attId, term_id: termId, event_date: toDateOnly_(session.session_date), session_id: sessionId, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, event_type:'ATTENDANCE', score_title:'เข้าเรียน', score_delta:score, source_type:'RFID', source_ref:attId, status:'ACTIVE', void_reason:'', created_by:getUserEmail_(), created_at:now_(), updated_at:now_() });
-          idxByStudent[studentId] = { attendance_id: attId, student_id: studentId, scan_count:1 };
-          result = { raw, ok:true, duplicate:false, message:'เช็กชื่อสำเร็จ', student_id: studentId, name: student.student_name_th || student.student_name_en || '' };
-        }
-      }
-      queueRows.push({ queue_id: queueId, term_id: termId, session_id: sessionId, raw_scan_value: raw, received_at: receivedAt, client_id: scan.client_id || '', process_status: result.ok ? 'PROCESSED' : 'ERROR', processed_at: now_(), result_message: result.message, student_id: result.student_id || '', note:'' });
-      results.push(result);
-    });
-    appendObjects_(SHEETS.SCAN_QUEUE, queueRows);
-    appendObjects_(SHEETS.ATTENDANCE_LOG, attendanceRows);
-    appendObjects_(SHEETS.ATTENDANCE_INDEX, indexRows);
-    appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
-    return ok_({ processed: results.length, inserted: attendanceRows.length, duplicates: results.filter(r => r.duplicate).length, errors: results.filter(r => !r.ok).length, results }, 'Scan batch processed');
+    const ctx = loadScanContext_(sessionId);
+    const processed = scans.map(scan => processSingleScan_(scan, ctx));
+    const persisted = persistScanResults_(processed, ctx);
+    return ok_(summarizeScanResults_(processed, persisted), 'Scan batch processed');
   } finally { lock.releaseLock(); }
 }
 function markAbsentForSession(sessionId) {
   assertRole_(['ADMIN','TEACHER']);
+  validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
   const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
   if (!session) throw new Error('Session not found');
-  const enrollments = getRows_(SHEETS.ENROLLMENTS).filter(r => String(r.offering_id) === String(session.offering_id) && String(r.enrollment_status) === 'ACTIVE');
-  const present = new Set(getRows_(SHEETS.ATTENDANCE_INDEX).filter(r => String(r.session_id) === String(sessionId)).map(r => cleanId_(r.student_id)));
+  assertOfferingAccess_(session.offering_id);
+  const enrollments = getCachedEnrollmentsByOffering_(session.offering_id);
+  const present = new Set(getCachedAttendanceIndexBySession_(sessionId).map(r => cleanId_(r.student_id)));
   const rows = enrollments.filter(e => !present.has(cleanId_(e.student_id))).map(e => ({ attendance_id: uuid_('ABS'), term_id: session.term_id, session_id: sessionId, offering_id: session.offering_id, class_code: session.class_code, student_id: cleanId_(e.student_id), rfid_code:'', checkin_time:'', checkin_method:'SYSTEM', attendance_status:'ABSENT', score:0, is_scored:false, created_by:getUserEmail_(), created_at:now_(), note:'Marked absent after session' }));
   appendObjects_(SHEETS.ATTENDANCE_LOG, rows);
   return ok_({ absent: rows.length }, 'Absent records created');
