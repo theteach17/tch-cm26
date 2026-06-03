@@ -331,7 +331,7 @@ function bulkResolveTopicErrors_(topicKeys, termId) {
 }
 
 /**
- * v1.8.0 review-performance-date
+ * v1.9.0 review-viewer-images
  * Review page performance fix:
  * - Do not load all submissions/files for review.
  * - Force the user flow to choose class + topic first.
@@ -412,7 +412,11 @@ function buildReviewIndexRows_(filters) {
   return subs.map(function (s) {
     const files = (filesBySub[String(s.submission_id)] || []).sort(function (a, b) { return Number(a.file_no || 0) - Number(b.file_no || 0); });
     const fileUrls = files.map(function (f) { return String(f.file_url || ''); }).filter(Boolean);
-    const previewUrls = files.map(function (f) { return String(f.preview_url || makePreviewUrl_(f.file_url) || ''); }).filter(Boolean);
+    const previewUrls = files.map(function (f) {
+      // Always regenerate a thumbnail URL from the original Drive URL when possible.
+      // Old rows may still contain uc?export=view previews, which often fail in Web App image tags.
+      return String(makePreviewUrl_(f.file_url || f.preview_url || f.file_id) || f.preview_url || '');
+    }).filter(Boolean);
     return {
       review_index_id: 'RIDX-' + digest_(String(s.submission_id || ''), 18),
       term_id: s.term_id || termId,
@@ -483,8 +487,19 @@ function reviewIndexRowToSubmission_(r) {
   const maxLen = Math.max(fileUrls.length, previewUrls.length, Number(r.file_count || 0));
   const files = [];
   for (let i = 0; i < maxLen; i++) {
-    if (!fileUrls[i] && !previewUrls[i]) continue;
-    files.push({ file_no: i + 1, file_url: fileUrls[i] || r.first_file_url || '', preview_url: previewUrls[i] || r.first_preview_url || '' });
+    const originalUrl = fileUrls[i] || r.first_file_url || '';
+    const fileId = extractDriveFileId_(originalUrl || previewUrls[i] || r.first_preview_url || '');
+    const preview = makePreviewUrl_(originalUrl || fileId) || previewUrls[i] || r.first_preview_url || '';
+    const viewUrl = makeDriveViewUrl_(originalUrl || fileId);
+    if (!originalUrl && !preview && !viewUrl) continue;
+    files.push({
+      file_no: i + 1,
+      file_id: fileId,
+      file_url: viewUrl || originalUrl,
+      original_url: originalUrl,
+      preview_url: preview,
+      thumb_url: preview
+    });
   }
   return {
     submission_id: r.submission_id,

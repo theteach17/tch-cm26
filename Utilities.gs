@@ -27,7 +27,13 @@ function extractDriveFileId_(url) {
 }
 function makePreviewUrl_(url) {
   const id = extractDriveFileId_(url);
-  return id ? 'https://drive.google.com/uc?export=view&id=' + id : '';
+  // Google Drive thumbnail is more reliable inside HtmlService than uc?export=view,
+  // especially when files are private but visible to the signed-in teacher.
+  return id ? 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1600' : '';
+}
+function makeDriveViewUrl_(url) {
+  const id = extractDriveFileId_(url);
+  return id ? 'https://drive.google.com/file/d/' + id + '/view?usp=drivesdk' : String(url || '');
 }
 function classTextToCode_(classText) {
   const s = String(classText || '').trim();

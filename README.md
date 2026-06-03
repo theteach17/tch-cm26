@@ -67,6 +67,12 @@ initializeSystem({
 - Verified the client-side `<script>` block using a JavaScript syntax check.
 
 
+## v1.9.0 Review Viewer + Image Fix
+
+- แก้ปัญหา CSS แสดงเป็นข้อความด้านบนหน้าเว็บ
+- ปรับหน้า Review ให้ตรวจทีละรายการแบบภาพใหญ่ ซูมได้ เลื่อนก่อนหน้า/ถัดไปได้ และบันทึกแล้วเลื่อนอัตโนมัติ
+- ปรับ URL รูปจาก Google Drive เป็น thumbnail เพื่อแสดงรูปใน Web App ได้เสถียรกว่า
+
 ## v1.8.0 Review Performance + Thai Date
 - แก้วันที่หน้าเปิดคาบไม่ให้แสดงแบบ MM/DD/YYYY โดยแสดงเป็นวันที่ไทย และส่งค่า backend เป็น ISO yyyy-MM-dd
 - เพิ่ม dropdown หัวข้องานในหน้า Review หลังเลือกห้อง

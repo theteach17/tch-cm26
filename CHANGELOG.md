@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v1.9.0-review-viewer-images
+- Fixed raw CSS text appearing at the top of the Web App by keeping all review styles inside styles.html <style>.
+- Changed Review UX from card grid to one-by-one large image inspection mode.
+- Added next/previous navigation, auto-advance after review save, image zoom controls, thumbnail switching, and open-original-file action.
+- Regenerated Drive preview URLs using drive.google.com/thumbnail for better image rendering in HtmlService.
+- Kept topic-required Review flow and ReviewIndex performance design from v1.8.
+
 ## v1.7.0-client-serialization-fix
 - Fixed root cause where the backend could read `CourseOfferings` but the browser dropdown stayed empty.
 - Added `sanitizeForClient_()` to convert Google Sheet `Date` objects and other non-plain values into JSON-safe strings before returning through `google.script.run`.
