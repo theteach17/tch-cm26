@@ -21,29 +21,108 @@ function setupGuardedCall_(fn) {
   return fn.apply(null, args);
 }
 
-function api_bootstrap() {
-  return guardedCall_(['VIEWER'], function () {
-    const user = getCurrentUser();
-    const activeTerm = getActiveTerm_();
-    const offerings = roleRank_(user.role) >= roleRank_('TEACHER') ? listUiOfferings_() : [];
-    const sessionDefaults = getCurrentPeriodInfo_();
-    return ok_({
-      user,
-      config:{
-        activeTerm,
-        appName:APP.NAME,
-        version:APP.VERSION,
-        reviewPageSize:APP.REVIEW_PAGE_SIZE,
-        maxScanRetry:APP.MAX_SCAN_RETRY,
-        sessionDefaults
-      },
-      offerings,
-      diagnostics:{ offeringCount: offerings.length, activeTerm, role: user.role }
-    }, 'Bootstrapped');
-  });
+function buildBootstrapData_() {
+  const diagnostics = { phase: 'bootstrap', errors: [], warnings: [] };
+  let user = null;
+  try {
+    user = getCurrentUser();
+  } catch (err) {
+    user = { email: getUserEmail_(), displayName: getUserEmail_(), role: 'VIEWER', allowedOfferings: '' };
+    diagnostics.errors.push('getCurrentUser failed: ' + err.message);
+  }
+
+  let activeTerm = APP.ACTIVE_TERM_ID;
+  try {
+    activeTerm = getActiveTerm_();
+  } catch (err) {
+    diagnostics.errors.push('getActiveTerm failed: ' + err.message);
+  }
+
+  let sessionDefaults = null;
+  try {
+    sessionDefaults = getCurrentPeriodInfo_();
+  } catch (err) {
+    diagnostics.errors.push('period defaults failed: ' + err.message);
+    try { sessionDefaults = { date: Utilities.formatDate(new Date(), APP.TIMEZONE, 'yyyy-MM-dd'), period_no: '', period_label: '', state: 'ERROR', schedule: APP.DEFAULT_PERIOD_SCHEDULE || [] }; } catch(e) {}
+  }
+
+  let offerings = [];
+  try {
+    // The selector must not be a single point of failure. listUiOfferings_ already applies user access rules.
+    offerings = listUiOfferings_();
+  } catch (err) {
+    diagnostics.errors.push('listUiOfferings failed: ' + err.message);
+    // Last-resort fallback for diagnostics and UI continuity. This does not expose student data.
+    try {
+      const rows = getRows_(SHEETS.COURSE_OFFERINGS).filter(function (r) {
+        return String(r.term_id) === String(activeTerm) && String(r.status).toUpperCase() === 'ACTIVE';
+      });
+      if (roleRank_(user.role) >= roleRank_('TEACHER') || String(user.allowedOfferings || '').trim() === '*') {
+        offerings = rows;
+        diagnostics.warnings.push('Loaded offerings by direct fallback after listUiOfferings failed.');
+      }
+      diagnostics.directOfferingCount = rows.length;
+    } catch (e2) {
+      diagnostics.errors.push('direct offering fallback failed: ' + e2.message);
+    }
+  }
+
+  diagnostics.offeringCount = offerings.length;
+  diagnostics.activeTerm = activeTerm;
+  diagnostics.role = user.role;
+  diagnostics.email = user.email;
+  return {
+    user: user,
+    config: {
+      activeTerm: activeTerm,
+      appName: APP.NAME,
+      version: APP.VERSION,
+      reviewPageSize: APP.REVIEW_PAGE_SIZE,
+      maxScanRetry: APP.MAX_SCAN_RETRY,
+      sessionDefaults: sessionDefaults
+    },
+    offerings: offerings,
+    diagnostics: diagnostics
+  };
 }
 
-function api_listOfferings() { return guardedCall_(['ADMIN','TEACHER'], function () { return ok_(listUiOfferings_(), 'Offerings loaded'); }); }
+function api_bootstrap() {
+  // Bootstrap must be tolerant: if one part fails, the UI still needs diagnostics instead of staying on "Loading...".
+  try {
+    assertAuthenticated_();
+    return ok_(buildBootstrapData_(), 'Bootstrapped');
+  } catch (err) {
+    return ok_({
+      user: { email: 'unknown', displayName: 'unknown', role: 'VIEWER', allowedOfferings: '' },
+      config: { activeTerm: APP.ACTIVE_TERM_ID, appName: APP.NAME, version: APP.VERSION, reviewPageSize: APP.REVIEW_PAGE_SIZE, maxScanRetry: APP.MAX_SCAN_RETRY, sessionDefaults: null },
+      offerings: [],
+      diagnostics: { phase: 'bootstrap', errors: [err.message], warnings: ['Authentication or deployment setting may be incorrect.'], offeringCount: 0 }
+    }, 'Bootstrapped with diagnostics');
+  }
+}
+
+function api_listOfferings() {
+  return guardedCall_(['VIEWER'], function () {
+    const data = buildBootstrapData_();
+    return ok_({ offerings: data.offerings, diagnostics: data.diagnostics, user: data.user }, 'Offerings loaded');
+  });
+}
+function api_diagnoseStartup() {
+  return guardedCall_(['VIEWER'], function () {
+    const data = buildBootstrapData_();
+    let sheetStats = {};
+    try {
+      [SHEETS.USERS, SHEETS.SYSTEM_CONFIG, SHEETS.CLASSES, SHEETS.COURSE_OFFERINGS, SHEETS.SESSIONS].forEach(function (name) {
+        const sh = sh_(name);
+        sheetStats[name] = { rows: Math.max(0, sh.getLastRow() - 1), cols: sh.getLastColumn() };
+      });
+    } catch (err) {
+      data.diagnostics.errors.push('sheetStats failed: ' + err.message);
+    }
+    data.diagnostics.sheetStats = sheetStats;
+    return ok_(data.diagnostics, 'Startup diagnostics loaded');
+  });
+}
 function api_getSessionDefaults() { return guardedCall_(['ADMIN','TEACHER'], getSessionDefaults); }
 
 function api_initializeSystem(options) { return setupGuardedCall_(initializeSystem, options || {}); }

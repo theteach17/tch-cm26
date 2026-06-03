@@ -1,3 +1,11 @@
+
+## v1.6.0-startup-diagnostics
+- Fixed startup single-point-of-failure that could leave all offering selectors blank while the database already contained CourseOfferings.
+- Added tolerant `api_bootstrap()` with partial diagnostics instead of hard failure.
+- Added `api_diagnoseStartup()` for real server-side diagnostics: user role, active term, offering count, and sheet row counts.
+- Updated frontend offering loading to accept both array and object API shapes.
+- Added visible "วิเคราะห์ปัญหา" button on the Start Session screen.
+
 # CHANGELOG
 
 ## v1.5.0-session-ui-hotfix

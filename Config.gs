@@ -1,7 +1,7 @@
 /**
  * Classroom Management Ledger System
  * Production-hardened Google Apps Script + Google Sheets Web App
- * Version: 1.5.0-session-ui-hotfix
+ * Version: 1.6.0-startup-diagnostics
  *
  * IMPORTANT SECURITY NOTE:
  * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.5.0-session-ui-hotfix',
+  VERSION: '1.6.0-startup-diagnostics',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',

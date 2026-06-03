@@ -19,17 +19,33 @@ async function confirmAction(title,message){return new Promise(resolve=>{resolve
 function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));const sec=document.getElementById(id);if(sec)sec.classList.add('active');document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.section===id));if(id==='dashboard')loadDashboard();if(id==='session'){ensureOfferingsLoadedUI();applySessionDefaultsUI();}if(id==='attendance'||id==='scores')loadActiveSessionsUI();}
 function renderOfferingOption(o){return `<option value="${escapeAttr(o.offering_id)}">${escapeHtml(o.class_text||o.class_code)} · ${escapeHtml(o.course_code||'')} ${o.course_name?('· '+escapeHtml(o.course_name)):''}</option>`;}
 function fillOfferingSelects(){
+  state.offerings = Array.isArray(state.offerings) ? state.offerings : [];
   const opts=state.offerings.map(renderOfferingOption).join('');
-  ['sessionOffering','gradeOffering'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts||'<option value="">ไม่พบรายการห้อง/รายวิชา</option>';});
+  ['sessionOffering','gradeOffering'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts?('<option value="">— เลือกห้อง/รายวิชา —</option>'+opts):'<option value="">ไม่พบรายการห้อง/รายวิชา</option>';});
   const clsOpts='<option value="">ทุกห้อง</option>'+state.offerings.map(o=>`<option value="${escapeAttr(o.class_code)}">${escapeHtml(o.class_text||o.class_code)} · ${escapeHtml(o.course_code||'')}</option>`).join('');
   ['topicClass','reviewClass'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=clsOpts;});
   const warning=document.getElementById('sessionOfferingWarning');
   if(warning){
     warning.classList.toggle('d-none',state.offerings.length>0);
-    if(!state.offerings.length)warning.innerHTML='<b>ยังไม่พบห้องเรียน/รายวิชา</b><br>ให้กดปุ่ม “ซ่อม/โหลดห้องเรียนใหม่” หรือไปหน้า ตั้งค่าระบบ > Initialize / Repair';
+    if(!state.offerings.length)warning.innerHTML='<b>ยังไม่พบห้องเรียน/รายวิชาในหน้าเว็บ</b><br>จากข้อมูลจริงอาจมีห้องอยู่แล้ว แต่ API โหลดไม่ได้ ให้กด “วิเคราะห์ปัญหา” เพื่อดู email, role, activeTerm และจำนวน CourseOfferings ที่ server อ่านได้';
   }
 }
-async function ensureOfferingsLoadedUI(){return runUiAction('ensureOfferingsLoadedUI',async()=>{if(state.offerings&&state.offerings.length){fillOfferingSelects();return;}const r=await call('api_listOfferings');state.offerings=r.data||[];fillOfferingSelects();if(!state.offerings.length)toast('ไม่พบรายการห้องเรียน โปรดกด Initialize / Repair','warning');});}
+function normalizeOfferingsResponse_(r){
+  if(!r||!r.data)return [];
+  if(Array.isArray(r.data))return r.data;
+  if(Array.isArray(r.data.offerings))return r.data.offerings;
+  return [];
+}
+async function diagnoseStartupUI(targetId='sessionResult'){
+  return runUiAction('diagnoseStartupUI',async()=>{
+    const r=await call('api_diagnoseStartup');
+    const box=document.getElementById(targetId)||document.getElementById('sessionResult');
+    if(box)box.innerHTML=`<div class="alert alert-info"><b>ผลวิเคราะห์ Startup</b><pre class="mb-0 small">${escapeHtml(JSON.stringify(r.data,null,2))}</pre></div>`;
+    return r.data;
+  });
+}
+async function ensureOfferingsLoadedUI(){return runUiAction('ensureOfferingsLoadedUI',async()=>{if(state.offerings&&state.offerings.length){fillOfferingSelects();return;}const r=await call('api_listOfferings');state.offerings=normalizeOfferingsResponse_(r);fillOfferingSelects();if(!state.offerings.length){toast('ไม่พบรายการห้องเรียนใน API กำลังแสดงผลวิเคราะห์','warning');await diagnoseStartupUI('sessionResult');}});}
+
 function applySessionDefaultsFromData(d){
   if(!d)return;
   const dateEl=document.getElementById('sessionDate'); if(dateEl&&!dateEl.value)dateEl.value=d.date||localDateValue();
@@ -39,8 +55,8 @@ function applySessionDefaultsFromData(d){
   const chips=document.getElementById('periodScheduleChips'); if(chips&&d.schedule){chips.innerHTML=d.schedule.map(p=>`<span class="period-chip me-1 mb-1">${p.period_no} · ${p.start}-${p.end}</span>`).join('');}
 }
 async function applySessionDefaultsUI(force=false){return runUiAction('applySessionDefaultsUI',async()=>{if(!force&&state.sessionDefaults){applySessionDefaultsFromData(state.sessionDefaults);return;}const r=await call('api_getSessionDefaults',{silentLoading:true});state.sessionDefaults=r.data;applySessionDefaultsFromData(r.data);});}
-async function reloadOfferingsUI(){return runUiAction('reloadOfferingsUI',async()=>{const r=await call('api_listOfferings');state.offerings=r.data||[];fillOfferingSelects();toast(`โหลดห้องเรียนแล้ว ${state.offerings.length} รายการ`);});}
-async function bootstrap(){return runUiAction('bootstrap',async()=>{updateClock();const r=await call('api_bootstrap');state.user=r.data.user;state.offerings=r.data.offerings||[];state.review.limit=Number(r.data.config.reviewPageSize||30);state.maxScanRetry=Number(r.data.config.maxScanRetry||5)||5;state.sessionDefaults=r.data.config.sessionDefaults||null;document.getElementById('userBox').innerHTML=`👤 ${escapeHtml(state.user.displayName)}<br>🛡️ ${escapeHtml(state.user.role)}<br><span class="text-white-50">ห้องที่มองเห็น: ${state.offerings.length}</span>`;fillOfferingSelects();applySessionDefaultsFromData(state.sessionDefaults);if(!state.offerings.length)toast('ไม่พบห้องเรียนในสิทธิ์ผู้ใช้/ภาคเรียนนี้','warning');await loadDashboard();await loadActiveSessionsUI();});}
+async function reloadOfferingsUI(){return runUiAction('reloadOfferingsUI',async()=>{const r=await call('api_listOfferings');state.offerings=normalizeOfferingsResponse_(r);fillOfferingSelects();toast(`โหลดห้องเรียนแล้ว ${state.offerings.length} รายการ`);if(!state.offerings.length)await diagnoseStartupUI('sessionResult');});}
+async function bootstrap(){return runUiAction('bootstrap',async()=>{updateClock();let r=null;try{r=await call('api_bootstrap');}catch(e){document.getElementById('userBox').innerHTML='⚠️ Bootstrap failed<br><span class="text-white-50">เปิดหน้าตั้งค่า/วิเคราะห์ปัญหา</span>';await diagnoseStartupUI('dashCards');return;}state.user=(r.data&&r.data.user)||{displayName:'unknown',role:'VIEWER'};state.offerings=normalizeOfferingsResponse_(r);state.review.limit=Number((r.data&&r.data.config&&r.data.config.reviewPageSize)||30);state.maxScanRetry=Number((r.data&&r.data.config&&r.data.config.maxScanRetry)||5)||5;state.sessionDefaults=(r.data&&r.data.config&&r.data.config.sessionDefaults)||null;const diag=(r.data&&r.data.diagnostics)||{};document.getElementById('userBox').innerHTML=`👤 ${escapeHtml(state.user.displayName||state.user.email)}<br>🛡️ ${escapeHtml(state.user.role)}<br><span class="text-white-50">ห้องที่มองเห็น: ${state.offerings.length}</span>`;fillOfferingSelects();applySessionDefaultsFromData(state.sessionDefaults);if(diag.errors&&diag.errors.length){toast('Bootstrap มี warning/error กรุณาดูผลวิเคราะห์','warning');console.warn('bootstrap diagnostics',diag);}if(!state.offerings.length){toast('ไม่พบห้องเรียนในหน้าเว็บ กำลังลองโหลด fallback','warning');await ensureOfferingsLoadedUI();}await loadDashboard();await loadActiveSessionsUI();});}
 document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showSection(b.dataset.section)));bootstrap();const input=document.getElementById('scanInput');if(input){input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();handleScan(input.value);input.value='';}});}});
 window.addEventListener('unhandledrejection',e=>{console.error('Unhandled rejection',e.reason);toast('เกิดข้อผิดพลาดที่ยังไม่ได้จัดการ กรุณาลองใหม่หรือติดต่อผู้ดูแลระบบ','danger');});
 </script>
