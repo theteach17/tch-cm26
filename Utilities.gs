@@ -124,3 +124,75 @@ function getCachedAttendanceIndexBySession_(sessionId) {
 }
 function updateAttendanceIndexCache_(sessionId, rows) { cachePutJson_(cacheKey_('ATTENDANCE_INDEX_SESSION_V2', sessionId), rows || [], 120); }
 function invalidateAttendanceIndexCache_(sessionId) { if (sessionId) cacheRemove_(cacheKey_('ATTENDANCE_INDEX_SESSION_V2', sessionId)); }
+
+function defaultPeriodSchedule_() {
+  return (APP.DEFAULT_PERIOD_SCHEDULE || []).map(function (p) {
+    return { period_no: Number(p.period_no), start: String(p.start), end: String(p.end) };
+  });
+}
+function getPeriodSchedule_() {
+  const raw = getSetting_('PERIOD_SCHEDULE_JSON');
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed.map(function (p) {
+        return { period_no: Number(p.period_no), start: String(p.start), end: String(p.end) };
+      });
+    } catch (err) {
+      console.warn('Invalid PERIOD_SCHEDULE_JSON, fallback to default', err);
+    }
+  }
+  return defaultPeriodSchedule_();
+}
+function hhmmToMinutes_(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return 0;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+function minutesToHHMM_(mins) {
+  mins = Math.max(0, Number(mins || 0));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+}
+function getCurrentPeriodInfo_() {
+  const now = now_();
+  const schedule = getPeriodSchedule_();
+  const hm = Utilities.formatDate(now, tz_(), 'HH:mm');
+  const currentMin = hhmmToMinutes_(hm);
+  let selected = schedule[0] || { period_no: '', start: '', end: '' };
+  let state = 'UPCOMING';
+
+  for (let i = 0; i < schedule.length; i++) {
+    const p = schedule[i];
+    const start = hhmmToMinutes_(p.start);
+    const end = hhmmToMinutes_(p.end);
+    if (currentMin >= start && currentMin < end) {
+      selected = p;
+      state = 'IN_PERIOD';
+      break;
+    }
+    if (currentMin < start) {
+      selected = p;
+      state = 'BEFORE_NEXT_PERIOD';
+      break;
+    }
+    selected = p;
+    state = 'AFTER_LAST_PERIOD';
+  }
+
+  return {
+    now: fmtDate_(now, 'yyyy-MM-dd HH:mm:ss'),
+    date: toDateOnly_(now),
+    current_time: hm,
+    period_no: selected ? selected.period_no : '',
+    period_start: selected ? selected.start : '',
+    period_end: selected ? selected.end : '',
+    period_label: selected ? ('คาบ ' + selected.period_no + ' (' + selected.start + '-' + selected.end + ')') : '',
+    state: state,
+    schedule: schedule
+  };
+}
+function getSessionDefaults() {
+  return ok_(getCurrentPeriodInfo_(), 'Session defaults loaded');
+}

@@ -1,23 +1,45 @@
-# PDCA Review — v1.4.0 Production Audit
+# PDCA Review Notes
 
 ## Plan
-- Address audit findings in Security, Performance, Reliability, and UX.
-- Preserve existing data model to avoid breaking archive and sync data.
+
+ออกแบบระบบให้ Google Form เดิมเป็น read-only source เพื่อรักษาความเสถียร และให้ Google Sheet ใหม่เป็นฐานกลางของระบบ โดยรองรับหลายภาคเรียน หลายรายวิชา หลายห้องเรียน และการ archive
 
 ## Do
-- Added role guard to all API bridge functions.
-- Removed hardcoded real IDs.
-- Added validation helper and applied it to critical write functions.
-- Refactored scan processing and added CacheService.
-- Split frontend into modules and added retry limit / pagination / confirmations.
+
+สร้าง Apps Script project ที่มีโมดูลครบ:
+
+- Setup automation
+- Form header detection
+- Form sync and normalization
+- Retroactive topic mapping
+- Submission review with void/restore
+- Attendance scan batch processing
+- Score ledger
+- Room sheet generation
+- Term archive
 
 ## Check
-- Static JavaScript syntax check passed for all `.gs` files and inline scripts in `.html` modules.
-- Verified no real Spreadsheet IDs remain in source package.
-- Confirmed v1.4.0 appears in `APP.VERSION` and CHANGELOG.
+
+ประเด็นที่ตรวจซ้ำในโค้ด:
+
+- ไม่เขียนกลับไปยัง Google Form Responses เดิม
+- ทุก transactional table มี `term_id`
+- ทุกคะแนนอยู่ใน `ScoreLedger`
+- การยกเลิกใช้ `VOIDED` ไม่ลบข้อมูลจริง
+- Attendance ใช้ batch processing และมี `AttendanceIndex` กันซ้ำ
+- Sync ใช้ `submission_key` กันข้อมูลซ้ำ
+- TopicMap รองรับ LIVE และ RETROACTIVE
+- Room sheet เป็น generated view ไม่ใช่ฐานข้อมูลหลัก
 
 ## Act
-- Deploy to Apps Script as a new version.
-- Test with one class/offering first.
-- Watch Apps Script Executions for the first real classroom session.
-- If scan queue retries appear often, check network before increasing retry limits.
+
+ข้อเสนอเมื่อเริ่มใช้จริง:
+
+1. ทดสอบกับห้องเดียวก่อน เช่น ม.6/10
+2. สร้าง TopicMap ย้อนหลัง 1 หัวข้อ
+3. Sync และตรวจว่า NormalizedSubmissions ถูกต้อง
+4. Review รูป 5–10 รายการ
+5. เปิด Session ทดสอบสแกน RFID
+6. ตรวจ ScoreLedger และ Room Sheet
+7. ค่อยเปิดใช้ทุกห้อง
+

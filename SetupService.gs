@@ -45,7 +45,8 @@ function seedDefaults_(options) {
     ['AUTO_CREATE_CLASSES_OFFERINGS', 'TRUE', 'boolean', 'Automatically create class and course offering when a class appears in Form data'],
     ['TOPIC_NOT_MAPPED_LOG_MODE', 'SUMMARY', 'text', 'SUMMARY avoids one error row per student for missing topics'],
     ['REVIEW_PAGE_SIZE', String(APP.REVIEW_PAGE_SIZE), 'number', 'Default review page size'],
-    ['MAX_SCAN_RETRY', String(APP.MAX_SCAN_RETRY), 'number', 'Client scan retry limit']
+    ['MAX_SCAN_RETRY', String(APP.MAX_SCAN_RETRY), 'number', 'Client scan retry limit'],
+    ['PERIOD_SCHEDULE_JSON', JSON.stringify(APP.DEFAULT_PERIOD_SCHEDULE), 'json', 'Default period timetable for auto period selection']
   ];
   defaults.forEach(d => setSetting_(d[0], d[1], d[2], d[3]));
 

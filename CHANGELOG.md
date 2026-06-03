@@ -1,38 +1,26 @@
 # CHANGELOG
 
-## v1.4.0-production-audit
+## v1.5.0-session-ui-hotfix
 
-### Security
-- Added guarded API bridge for every `api_*` function.
-- Removed hardcoded real Spreadsheet IDs from source code and README.
-- Added setup-only/admin-only initialization guard.
-- Added offering access helper for future class-level authorization.
+### Fixed
+- แก้ปัญหาหน้าเปิดคาบเรียนไม่มีรายการห้อง/รายวิชา โดยเพิ่ม `api_listOfferings()` และ fallback `listUiOfferings_()` สำหรับ ADMIN
+- หน้า Web App โหลดรายการห้องใหม่ได้จากปุ่มในหน้าเปิดคาบเรียน
+- เพิ่ม session defaults จากเวลาระบบผ่าน `api_getSessionDefaults()`
 
-### Performance
-- Replaced cell-by-cell `updateRowById_()` with single-row `setValues()`.
-- Added CacheService helpers for student map, enrollments by offering, and attendance index by session.
-- Refactored scan processing into context loading, per-scan processing, batch persistence, and summary.
+### Added
+- ตารางคาบเรียนอัตโนมัติ:
+  - คาบ 1 08:20-09:10
+  - คาบ 2 09:10-10:00
+  - คาบ 3 10:00-10:50
+  - คาบ 4 10:50-11:40
+  - คาบ 5 11:50-12:40
+  - คาบ 6 12:40-13:30
+  - คาบ 7 13:30-14:20
+  - คาบ 8 14:20-15:10
+  - คาบ 9 15:10-16:00
+- `PERIOD_SCHEDULE_JSON` ใน SystemConfig เพื่อปรับตารางคาบได้ในอนาคตโดยไม่แก้โค้ด
+- UI ธีมใหม่แบบ professional dashboard พร้อม emoji/icon, gradient sidebar, hero bar และ period suggestion card
 
-### Reliability
-- Added backend validation helper and validation to critical write APIs.
-- Added bounded scan batch size.
-- Added safer source spreadsheet configuration and error messages.
-
-### UX
-- Split frontend into modules.
-- Added retry limit and exponential backoff for scan queue.
-- Added offline warning and pending scan export.
-- Added confirmation for destructive review actions.
-- Added lazy loading and pagination for review images.
-- Added real progress bar for full sync.
-
-## v1.3.0-auto-topic-repair
-- Auto-created TopicMap from Google Form topics.
-- Auto-created class/offering/student/enrollment from Form responses.
-- Auto-resolved TOPIC_NOT_MAPPED errors when repair succeeds.
-
-## v1.2.0-hotfix-ui
-- Fixed frontend JavaScript syntax issue.
-
-## v1.1.0-hotfix-timeout
-- Added chunked full sync to avoid Apps Script timeout.
+### Notes
+- ถ้าอัปเดตจาก v1.4 ให้แทนที่ทุกไฟล์ใน Apps Script แล้ว Deploy เป็น New version
+- หลัง deploy ให้กด Initialize / Repair System หนึ่งครั้งเพื่อเพิ่มค่า `PERIOD_SCHEDULE_JSON`

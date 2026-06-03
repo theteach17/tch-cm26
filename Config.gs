@@ -1,7 +1,7 @@
 /**
  * Classroom Management Ledger System
  * Production-hardened Google Apps Script + Google Sheets Web App
- * Version: 1.4.0-production-audit
+ * Version: 1.5.0-session-ui-hotfix
  *
  * IMPORTANT SECURITY NOTE:
  * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
@@ -12,14 +12,25 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.4.0-production-audit',
+  VERSION: '1.5.0-session-ui-hotfix',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SHEET_NAME: 'Form Responses 1',
   ACTIVE_TERM_ID: 'AY2569-T1',
   REVIEW_PAGE_SIZE: 30,
-  MAX_SCAN_RETRY: 5
+  MAX_SCAN_RETRY: 5,
+  DEFAULT_PERIOD_SCHEDULE: [
+    { period_no: 1, start: '08:20', end: '09:10' },
+    { period_no: 2, start: '09:10', end: '10:00' },
+    { period_no: 3, start: '10:00', end: '10:50' },
+    { period_no: 4, start: '10:50', end: '11:40' },
+    { period_no: 5, start: '11:50', end: '12:40' },
+    { period_no: 6, start: '12:40', end: '13:30' },
+    { period_no: 7, start: '13:30', end: '14:20' },
+    { period_no: 8, start: '14:20', end: '15:10' },
+    { period_no: 9, start: '15:10', end: '16:00' }
+  ]
 });
 
 const STATUS = Object.freeze({

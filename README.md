@@ -1,33 +1,70 @@
-# Classroom Management Ledger — Production Audit Build v1.4.0
+# Classroom Management Ledger System
 
-ระบบ Google Apps Script + Google Sheets สำหรับบริหารคาบเรียน, ดึงข้อมูลงานจาก Google Form Responses แบบ read-only, ตรวจรูปงาน, เช็กชื่อด้วย RFID/เลขประจำตัว, และรวมคะแนนใน ScoreLedger
+ระบบ Web App สำหรับจัดการคาบเรียน การสแกนบัตรเข้าเรียน การดึงข้อมูลส่งงานจาก Google Form Responses เดิม การตรวจรูปงาน การยกเลิก/คืนคะแนน และการสร้างสมุดคะแนนรายห้อง โดยใช้ Google Apps Script + Google Sheets เป็นฐานข้อมูล
 
-## Security first
+## แนวคิดหลัก
 
-เวอร์ชันนี้ **ไม่ฝัง Spreadsheet ID จริงใน repository** แล้ว ให้ตั้งค่าด้วยวิธีปลอดภัยเท่านั้น:
+- Google Form เดิมทำหน้าที่รับงานจากนักเรียนต่อไปเหมือนเดิม
+- ระบบใหม่อ่านข้อมูลจาก Form Responses แบบ read-only
+- Google Sheet `ClassroomManagement` เป็นฐานข้อมูลกลางของระบบใหม่
+- คะแนนทุกประเภทลงที่ `ScoreLedger`
+- การยกเลิกคะแนนใช้สถานะ `VOIDED` ไม่ลบข้อมูลจริง
+- รองรับภาคเรียนใหม่ ห้องเรียนใหม่ รายวิชาใหม่ ผ่าน `AcademicTerms` และ `CourseOfferings`
 
-1. เปิด Apps Script จากไฟล์ Google Sheet ฐานระบบ
-2. วางไฟล์โค้ดทั้งหมด
-3. รัน `setDbSpreadsheetId('<CLASSROOM_MANAGEMENT_SHEET_ID>')` จาก Apps Script editor หรือใช้ bound spreadsheet เป็นฐานหลัก
-4. รัน `initializeSystem({ sourceSpreadsheetId:'<FORM_RESPONSE_SPREADSHEET_ID>', sourceSheetName:'Form Responses 1' })`
-5. ตั้งค่า sharing ของ Google Sheets เป็น **Restricted**
+## ไฟล์สำคัญ
 
-ห้ามใส่ Spreadsheet ID จริงลง GitHub public repository
+- `appsscript.json` — manifest และ scopes
+- `Code.gs` — doGet และ API bridge สำหรับหน้าเว็บ
+- `Config.gs` — schema และ constants
+- `SetupService.gs` — สร้างชีท/ค่าเริ่มต้น/trigger อัตโนมัติ
+- `SourceFormService.gs` — อ่านและ sync Google Form Responses
+- `TopicSubmissionService.gs` — mapping หัวข้องาน, sync ย้อนหลัง, review
+- `SessionAttendanceService.gs` — เปิดคาบเรียนและสแกนบัตรเป็น batch
+- `ScoringReportService.gs` — คะแนนสมุด/พิเศษ/สมุดคะแนน/ชีทรายห้อง
+- `ArchiveService.gs` — archive ภาคเรียน
+- `Index.html` — Web App UI
 
-## Production hardening in v1.4.0
+## Quick Start
 
-- เพิ่ม Authorization Guard ทุก `api_*` function
-- ลบ hardcoded Spreadsheet IDs จาก `Config.gs` และเอกสาร
-- เปลี่ยน `updateRowById_()` เป็น single-row batch write
-- เพิ่ม CacheService สำหรับ Student Map, Enrollment Map และ Attendance Index รายคาบ
-- เพิ่ม Backend input validation
-- ปรับ RFID batch scan ให้ retry แบบ exponential backoff และมี retry limit
-- แยก Frontend เป็น module: `styles.html`, `utils.html`, `dashboard.html`, `session.html`, `topicsSync.html`, `review.html`, `gradebook.html`
-- ลด review default page size เป็น 30 และใช้ lazy image loading
-- เพิ่ม confirmation ก่อน VOID/RESTORE คะแนน
-- เพิ่ม progress bar จริงสำหรับ chunked sync
-- เพิ่ม CHANGELOG.md และ PDCA notes
+1. เปิด Apps Script จากไฟล์ Google Sheet `ClassroomManagement`
+2. คัดลอกไฟล์ทั้งหมดใน zip เข้า Apps Script project
+3. กด Save
+4. รัน `initializeSystem()` ครั้งแรก และ authorize
+5. รัน `detectFormHeaders()` เพื่อตรวจหัวตาราง Form Responses
+6. Deploy เป็น Web App
+7. เปิด Web App แล้วใช้งานเมนู Setup / Sync / Topic / Attendance / Review / Gradebook
 
-## Deployment
+## ค่าเริ่มต้นที่ฝังไว้
 
-ให้ใช้ `Deploy > Manage deployments > Edit > New version` ทุกครั้งหลังแก้ไฟล์ และตรวจว่า Web App เปิดให้เฉพาะผู้ที่ sign in ได้เท่านั้น
+Database Spreadsheet ID:
+`1Xs7L1kxtUBDcXiXcYXhStDEaxGV2SdUaZZa9QnbVdpo`
+
+Source Form Response Spreadsheet ID:
+`1P8MJ8PPzXg9TkApNl529NOj8UverQ-5hV498Hk0TXpQ`
+
+Source Sheet:
+`Form Responses 1`
+
+Active Term:
+`AY2569-T1`
+
+Attendance score start date:
+`2026-06-01`
+
+## ข้อควรทราบ
+
+ระบบนี้ออกแบบให้ production-oriented แต่ก่อนใช้จริงควรทดสอบกับสำเนาข้อมูลหรือห้องเรียนตัวอย่างก่อนอย่างน้อย 1 รอบ โดยเฉพาะการ sync ทั้งหมดจาก Google Form เดิมและการ review รายการส่งงานย้อนหลัง
+
+
+
+## v1.1.0 Hotfix: Chunked Sync
+- แก้ปัญหา `api_syncAllFormRows` ใช้เวลานานจน Web App timeout
+- Full Sync/Rebuild จะประมวลผลทีละชุดผ่าน `api_syncAllFormRowsChunk`
+- Sync ใหม่จาก trigger จะประมวลผลแบบ bounded chunk เพื่อความเสถียร
+- ลดการเขียน row-by-row ระหว่าง normalize โดย batch append นักเรียน/enrollment/error log
+
+
+## Hotfix v1.2.0
+- Fixed frontend JavaScript syntax error in `Index.html` that made all Web App buttons unresponsive after v1.1 timeout hotfix.
+- Replaced unsafe multiline string literal in `syncAllUI()` with escaped `\n`.
+- Verified the client-side `<script>` block using a JavaScript syntax check.

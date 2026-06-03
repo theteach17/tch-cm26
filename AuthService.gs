@@ -59,3 +59,23 @@ function getActiveSource_() {
   const termId = getActiveTerm_();
   return findOne_(SHEETS.SOURCE_FORMS, r => String(r.term_id) === termId && toBool_(r.is_active));
 }
+
+function listUiOfferings_() {
+  const termId = getActiveTerm_();
+  let rows = listActiveOfferings();
+  const user = getCurrentUser();
+
+  // Self-healing fallback for ADMIN: if the role filter or stale cache accidentally returns no rows,
+  // read the active term offerings directly so the session selector is not blank.
+  if (!rows.length && user.role === 'ADMIN') {
+    rows = getRows_(SHEETS.COURSE_OFFERINGS).filter(function (r) {
+      return String(r.term_id) === String(termId) && String(r.status).toUpperCase() === 'ACTIVE';
+    });
+  }
+
+  return rows.sort(function (a, b) {
+    const ga = Number(a.class_code || 9999), gb = Number(b.class_code || 9999);
+    if (ga !== gb) return ga - gb;
+    return String(a.course_code || '').localeCompare(String(b.course_code || ''), 'th');
+  });
+}

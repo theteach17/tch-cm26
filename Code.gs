@@ -25,10 +25,27 @@ function api_bootstrap() {
   return guardedCall_(['VIEWER'], function () {
     const user = getCurrentUser();
     const activeTerm = getActiveTerm_();
-    const offerings = roleRank_(user.role) >= roleRank_('TEACHER') ? listActiveOfferings() : [];
-    return ok_({ user, config:{ activeTerm, appName:APP.NAME, version:APP.VERSION, reviewPageSize:APP.REVIEW_PAGE_SIZE, maxScanRetry:APP.MAX_SCAN_RETRY }, offerings }, 'Bootstrapped');
+    const offerings = roleRank_(user.role) >= roleRank_('TEACHER') ? listUiOfferings_() : [];
+    const sessionDefaults = getCurrentPeriodInfo_();
+    return ok_({
+      user,
+      config:{
+        activeTerm,
+        appName:APP.NAME,
+        version:APP.VERSION,
+        reviewPageSize:APP.REVIEW_PAGE_SIZE,
+        maxScanRetry:APP.MAX_SCAN_RETRY,
+        sessionDefaults
+      },
+      offerings,
+      diagnostics:{ offeringCount: offerings.length, activeTerm, role: user.role }
+    }, 'Bootstrapped');
   });
 }
+
+function api_listOfferings() { return guardedCall_(['ADMIN','TEACHER'], function () { return ok_(listUiOfferings_(), 'Offerings loaded'); }); }
+function api_getSessionDefaults() { return guardedCall_(['ADMIN','TEACHER'], getSessionDefaults); }
+
 function api_initializeSystem(options) { return setupGuardedCall_(initializeSystem, options || {}); }
 function api_detectFormHeaders() { return guardedCall_(['ADMIN','TEACHER'], detectFormHeaders); }
 function api_syncNewFormRows() { return guardedCall_(['ADMIN','TEACHER'], syncNewFormRows); }

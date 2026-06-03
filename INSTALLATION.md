@@ -1,52 +1,93 @@
-# Installation — Classroom Management Ledger v1.4.0
+# Installation Guide
 
-## 1) Copy files into Apps Script
+## 1. เตรียมไฟล์ฐานข้อมูล
 
-สร้างไฟล์ Apps Script/HTML ตามชื่อไฟล์ใน ZIP แล้วคัดลอกเนื้อหาให้ครบทุกไฟล์ รวมถึง module HTML ใหม่:
+ใช้ไฟล์ Google Sheet ที่เตรียมไว้:
 
-- `Index.html`
-- `styles.html`
-- `utils.html`
-- `dashboard.html`
-- `session.html`
-- `topicsSync.html`
-- `review.html`
-- `gradebook.html`
+`ClassroomManagement`
 
-## 2) Configure secured spreadsheet IDs
+เปิด Extensions > Apps Script
 
-เวอร์ชันนี้ไม่ฝัง Spreadsheet ID ใน source code เพื่อความปลอดภัย
+## 2. นำไฟล์เข้า Apps Script
 
-จาก Apps Script editor ให้รันครั้งแรก:
+สร้างไฟล์ตามชื่อใน zip แล้วคัดลอกเนื้อหาไปวาง:
 
-```javascript
-setDbSpreadsheetId('<CLASSROOM_MANAGEMENT_SPREADSHEET_ID>');
-initializeSystem({
-  sourceSpreadsheetId: '<GOOGLE_FORM_RESPONSE_SPREADSHEET_ID>',
-  sourceSheetName: 'Form Responses 1'
-});
-```
+- appsscript.json
+- Code.gs
+- Config.gs
+- Utilities.gs
+- SheetService.gs
+- SetupService.gs
+- AuthService.gs
+- TermService.gs
+- SourceFormService.gs
+- TopicSubmissionService.gs
+- SessionAttendanceService.gs
+- ScoringReportService.gs
+- ArchiveService.gs
+- Index.html
 
-หลังจากนั้นตรวจชีต `SystemConfig` และ `SourceForms` ว่ามีค่า source ถูกต้อง
+## 3. Initialize
 
-## 3) Security settings
+ใน Apps Script เลือกฟังก์ชัน:
 
-- ตั้ง Google Sheet ทุกไฟล์เป็น `Restricted`
-- Deploy Web App โดยจำกัดผู้ใช้งานเป็น signed-in users
-- ตรวจ `Users` ให้ครูที่ใช้งานมี role `ADMIN` หรือ `TEACHER`
-- อย่านำ Spreadsheet ID จริงไป commit บน GitHub
+`initializeSystem`
 
-## 4) Deploy
+กด Run และ authorize
 
-`Deploy > Manage deployments > New version > Deploy`
+ระบบจะสร้างชีททั้งหมดให้เอง ได้แก่:
 
-หลัง deploy ให้ hard refresh Web App และตรวจว่ามุมซ้ายแสดง `v1.4.0-production-audit`
+- SystemConfig
+- Users
+- AcademicTerms
+- Courses
+- Classes
+- CourseOfferings
+- Students
+- Enrollments
+- SourceForms
+- FormHeaderMap
+- Sessions
+- TopicMap
+- RawFormRows
+- NormalizedSubmissions
+- SubmissionFiles
+- ReviewLog
+- AttendanceLog
+- AttendanceIndex
+- ScanQueue
+- BookCheckLog
+- ManualScoreLog
+- ScoreLedger
+- ErrorLog
+- AuditLog
+- ArchiveIndex
 
-## 5) Smoke test
+## 4. ตรวจหัวตาราง Google Form Responses
 
-1. เปิด Web App แล้วเข้า Dashboard
-2. กด Detect Form Headers
-3. กด Sync รายการใหม่
-4. เปิดเมนู Review ตรวจว่ารูปโหลดแบบ lazy ไม่เกิน 30 รายการต่อหน้า
-5. เปิดคาบเรียนทดสอบ แล้วลองสแกน/กรอกเลขนักเรียน 2–3 รายการ
-6. ตรวจ `AttendanceLog`, `AttendanceIndex`, `ScoreLedger`
+รัน:
+
+`detectFormHeaders`
+
+ระบบจะอ่านหัวตารางจากไฟล์ Google Form Responses เดิม และสร้าง mapping ใน `FormHeaderMap`
+
+## 5. Deploy Web App
+
+Deploy > New deployment > Web app
+
+- Execute as: Me
+- Who has access: Only myself / Anyone in domain ตามนโยบายโรงเรียน
+
+## 6. เริ่มใช้งาน
+
+ลำดับแนะนำ:
+
+1. Setup > Initialize / Detect Headers
+2. Topics > ค้นหัวข้อจริงจาก Form
+3. บันทึก TopicMap สำหรับงานย้อนหลัง
+4. Sync > Sync ทั้งหมด
+5. Review > ตรวจรูปงาน
+6. Session > เปิดคาบ
+7. Attendance > สแกนบัตร
+8. Gradebook > ดูคะแนนและสร้างชีทรายห้อง
+
