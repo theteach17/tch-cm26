@@ -1,7 +1,7 @@
 /**
  * Classroom Management Ledger System
  * Production-hardened Google Apps Script + Google Sheets Web App
- * Version: 1.6.0-startup-diagnostics
+ * Version: 1.8.0-review-performance-date
  *
  * IMPORTANT SECURITY NOTE:
  * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.7.0-client-serialization-fix',
+  VERSION: '1.8.0-review-performance-date',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',
@@ -74,7 +74,8 @@ const SHEETS = Object.freeze({
   SCORE_LEDGER: 'ScoreLedger',
   ERROR_LOG: 'ErrorLog',
   AUDIT_LOG: 'AuditLog',
-  ARCHIVE_INDEX: 'ArchiveIndex'
+  ARCHIVE_INDEX: 'ArchiveIndex',
+  REVIEW_INDEX: 'ReviewIndex'
 });
 
 const SCHEMA = Object.freeze({
@@ -102,7 +103,8 @@ const SCHEMA = Object.freeze({
   [SHEETS.SCORE_LEDGER]: ['score_event_id','term_id','event_date','session_id','offering_id','class_code','student_id','event_type','score_title','score_delta','source_type','source_ref','status','void_reason','created_by','created_at','updated_at'],
   [SHEETS.ERROR_LOG]: ['error_id','source_row','error_type','error_message','raw_value','status','created_at','resolved_by','resolved_at'],
   [SHEETS.AUDIT_LOG]: ['audit_id','timestamp','user_email','action','target_sheet','target_id','old_value','new_value','note'],
-  [SHEETS.ARCHIVE_INDEX]: ['archive_id','term_id','archive_file_id','archive_url','created_by','created_at','status','note']
+  [SHEETS.ARCHIVE_INDEX]: ['archive_id','term_id','archive_file_id','archive_url','created_by','created_at','status','note'],
+  [SHEETS.REVIEW_INDEX]: ['review_index_id','term_id','offering_id','class_code','topic_id','form_topic_text','submission_id','student_id','student_name','timestamp','review_status','score_status','score','file_count','first_preview_url','first_file_url','file_urls_json','preview_urls_json','updated_at']
 });
 
 const REVIEW_ACTIONS = Object.freeze({

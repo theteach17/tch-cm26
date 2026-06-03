@@ -11,12 +11,22 @@ function showLoading(v){const el=document.getElementById('loading');if(el)el.cla
 function toast(msg,type='success'){const box=document.getElementById('toastArea');if(!box)return;const el=document.createElement('div');el.className=`alert alert-${type} shadow mb-2`;el.textContent=msg;box.appendChild(el);setTimeout(()=>el.remove(),4500);}
 function escapeHtml(v){return String(v===undefined||v===null?'':v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function escapeAttr(v){return escapeHtml(v).replace(/`/g,'&#96;');}
+
+function formatThaiDateDisplay(iso){
+  if(!iso)return '';
+  const parts=String(iso).slice(0,10).split('-');
+  if(parts.length!==3)return iso;
+  const y=Number(parts[0]),m=Number(parts[1]),d=Number(parts[2]);
+  const months=['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  return `${d} ${months[m]||''} ${y+543}`;
+}
+
 function localDateValue(d=new Date()){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function updateClock(){const el=document.getElementById('heroClock');if(el)el.textContent=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});}setInterval(updateClock,10000);
 function call(fn,...args){let options={};if(args.length&&typeof args[args.length-1]==='object'&&args[args.length-1]&&args[args.length-1].silentLoading!==undefined){options=args.pop();}if(!options.silentLoading)showLoading(true);return new Promise((resolve,reject)=>{google.script.run.withSuccessHandler(r=>{if(!options.silentLoading)showLoading(false);if(r&&r.ok===false){toast(r.message||'เกิดข้อผิดพลาด','danger');reject(r);}else resolve(r);}).withFailureHandler(e=>{if(!options.silentLoading)showLoading(false);toast(e&&e.message?e.message:String(e),'danger');reject(e);})[fn](...args);});}
 async function runUiAction(name,fn){try{return await fn();}catch(e){console.error(name,e);return null;}}
 async function confirmAction(title,message){return new Promise(resolve=>{resolve(window.confirm(title+'\n\n'+message));});}
-function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));const sec=document.getElementById(id);if(sec)sec.classList.add('active');document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.section===id));if(id==='dashboard')loadDashboard();if(id==='session'){ensureOfferingsLoadedUI();applySessionDefaultsUI();}if(id==='attendance'||id==='scores')loadActiveSessionsUI();}
+function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));const sec=document.getElementById(id);if(sec)sec.classList.add('active');document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.section===id));if(id==='dashboard')loadDashboard();if(id==='session'){ensureOfferingsLoadedUI();applySessionDefaultsUI();}if(id==='attendance'||id==='scores')loadActiveSessionsUI();if(id==='review'){ensureOfferingsLoadedUI();if(document.getElementById('reviewClass')&&document.getElementById('reviewClass').value)loadReviewTopicsUI();}}
 function renderOfferingOption(o){return `<option value="${escapeAttr(o.offering_id)}">${escapeHtml(o.class_text||o.class_code)} · ${escapeHtml(o.course_code||'')} ${o.course_name?('· '+escapeHtml(o.course_name)):''}</option>`;}
 function fillOfferingSelects(){
   state.offerings = Array.isArray(state.offerings) ? state.offerings : [];
@@ -48,7 +58,10 @@ async function ensureOfferingsLoadedUI(){return runUiAction('ensureOfferingsLoad
 
 function applySessionDefaultsFromData(d){
   if(!d)return;
-  const dateEl=document.getElementById('sessionDate'); if(dateEl&&!dateEl.value)dateEl.value=d.date||localDateValue();
+  const isoDate=d.date||localDateValue();
+  const dateEl=document.getElementById('sessionDate'); if(dateEl)dateEl.value=isoDate;
+  const thaiEl=document.getElementById('sessionDateThai'); if(thaiEl)thaiEl.textContent=formatThaiDateDisplay(isoDate);
+  const isoText=document.getElementById('sessionDateIsoText'); if(isoText)isoText.textContent='ระบบจะบันทึกเป็น '+isoDate;
   const pEl=document.getElementById('periodNo'); if(pEl)pEl.value=d.period_no||'';
   const label=document.getElementById('periodSuggestionLabel'); if(label)label.textContent=d.period_label||'ไม่พบคาบตามเวลา';
   const detail=document.getElementById('periodSuggestionDetail'); if(detail)detail.textContent=`เวลาเครื่องระบบ: ${d.now||''} · สถานะ: ${d.state||''}`;

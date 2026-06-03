@@ -329,3 +329,248 @@ function bulkResolveTopicErrors_(topicKeys, termId) {
   if (resolved) sh.getRange(2,1,lastRow-1,lastCol).setValues(values);
   return resolved;
 }
+
+/**
+ * v1.8.0 review-performance-date
+ * Review page performance fix:
+ * - Do not load all submissions/files for review.
+ * - Force the user flow to choose class + topic first.
+ * - Use a denormalized ReviewIndex sheet for fast paginated review cards.
+ * - Keep api_listSubmissionsForReview name for frontend compatibility, but serve it from ReviewIndex.
+ */
+function ensureReviewIndexSheet_() {
+  return ensureSheet_(SHEETS.REVIEW_INDEX, SCHEMA[SHEETS.REVIEW_INDEX]);
+}
+
+function listReviewTopics(filters) {
+  filters = filters || {};
+  validate_(filters, { class_code: { maxLen: 20 }, offering_id: { maxLen: 120 }, term_id: { maxLen: 40 } });
+  const termId = filters.term_id || getActiveTerm_();
+  let topics = getRows_(SHEETS.TOPIC_MAP).filter(function (t) {
+    if (String(t.term_id) !== String(termId)) return false;
+    if (String(t.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return false;
+    if (filters.offering_id && String(t.offering_id) !== String(filters.offering_id)) return false;
+    if (filters.class_code && String(t.class_code) !== String(filters.class_code)) return false;
+    return true;
+  });
+
+  topics.sort(function (a, b) {
+    return String(b.assigned_date || '').localeCompare(String(a.assigned_date || '')) || String(a.display_topic_name || a.form_topic_text).localeCompare(String(b.display_topic_name || b.form_topic_text));
+  });
+
+  let countByTopic = {};
+  try {
+    ensureReviewIndexSheet_();
+    getRows_(SHEETS.REVIEW_INDEX).forEach(function (r) {
+      if (String(r.term_id) !== String(termId)) return;
+      if (filters.class_code && String(r.class_code) !== String(filters.class_code)) return;
+      const key = String(r.topic_id || '');
+      if (key) countByTopic[key] = (countByTopic[key] || 0) + 1;
+    });
+  } catch (err) {
+    console.warn('Review topic counts skipped', err);
+  }
+
+  return ok_({
+    term_id: termId,
+    class_code: filters.class_code || '',
+    topics: topics.map(function (t) {
+      return Object.assign({}, t, {
+        indexed_count: countByTopic[String(t.topic_id)] || 0,
+        label: (t.display_topic_name || t.form_topic_text || t.topic_id) + ' · ' + (t.assigned_date || '')
+      });
+    })
+  }, 'Review topics loaded');
+}
+
+function topicMatchesFilter_(r, filters) {
+  if (filters.term_id && String(r.term_id) !== String(filters.term_id)) return false;
+  if (!filters.term_id && String(r.term_id) !== String(getActiveTerm_())) return false;
+  if (filters.offering_id && String(r.offering_id) !== String(filters.offering_id)) return false;
+  if (filters.class_code && String(r.class_code) !== String(filters.class_code)) return false;
+  if (filters.topic_id && String(r.topic_id) !== String(filters.topic_id)) return false;
+  if (filters.form_topic_text && normalizeText_(r.form_topic_text) !== normalizeText_(filters.form_topic_text)) return false;
+  return true;
+}
+
+function buildReviewIndexRows_(filters) {
+  filters = filters || {};
+  const termId = filters.term_id || getActiveTerm_();
+  let subs = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(function (r) {
+    return topicMatchesFilter_(r, Object.assign({}, filters, { term_id: termId }));
+  });
+  if (!subs.length) return [];
+
+  const subIds = new Set(subs.map(function (s) { return String(s.submission_id); }));
+  const filesBySub = {};
+  getRows_(SHEETS.SUBMISSION_FILES).forEach(function (f) {
+    const sid = String(f.submission_id || '');
+    if (!subIds.has(sid)) return;
+    (filesBySub[sid] = filesBySub[sid] || []).push(f);
+  });
+
+  return subs.map(function (s) {
+    const files = (filesBySub[String(s.submission_id)] || []).sort(function (a, b) { return Number(a.file_no || 0) - Number(b.file_no || 0); });
+    const fileUrls = files.map(function (f) { return String(f.file_url || ''); }).filter(Boolean);
+    const previewUrls = files.map(function (f) { return String(f.preview_url || makePreviewUrl_(f.file_url) || ''); }).filter(Boolean);
+    return {
+      review_index_id: 'RIDX-' + digest_(String(s.submission_id || ''), 18),
+      term_id: s.term_id || termId,
+      offering_id: s.offering_id || '',
+      class_code: s.class_code || '',
+      topic_id: s.topic_id || '',
+      form_topic_text: s.form_topic_text || '',
+      submission_id: s.submission_id || '',
+      student_id: s.student_id || '',
+      student_name: s.student_name || '',
+      timestamp: s.timestamp || '',
+      review_status: s.review_status || 'PENDING',
+      score_status: s.score_status || '',
+      score: s.score || '',
+      file_count: files.length || Number(s.file_count || 0),
+      first_preview_url: previewUrls[0] || '',
+      first_file_url: fileUrls[0] || '',
+      file_urls_json: safeJson_(fileUrls),
+      preview_urls_json: safeJson_(previewUrls),
+      updated_at: now_()
+    };
+  });
+}
+
+function replaceReviewIndexRows_(filters, newRows) {
+  ensureReviewIndexSheet_();
+  const sh = sh_(SHEETS.REVIEW_INDEX);
+  const headers = SCHEMA[SHEETS.REVIEW_INDEX];
+  const existing = getRows_(SHEETS.REVIEW_INDEX);
+  const keep = existing.filter(function (r) { return !topicMatchesFilter_(r, filters); });
+  const rows = keep.concat(newRows || []);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(sh.getLastColumn(), headers.length)).clearContent();
+  if (rows.length) {
+    sh.getRange(2, 1, rows.length, headers.length).setValues(rows.map(function (obj) {
+      return headers.map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
+    }));
+  }
+  return { kept: keep.length, rebuilt: (newRows || []).length, total: rows.length };
+}
+
+function rebuildReviewIndex(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  validate_(payload, { class_code: { maxLen: 20 }, topic_id: { maxLen: 80 }, form_topic_text: { maxLen: 300 }, term_id: { maxLen: 40 } });
+  const filters = {
+    term_id: payload.term_id || getActiveTerm_(),
+    class_code: payload.class_code || '',
+    topic_id: payload.topic_id || '',
+    form_topic_text: payload.form_topic_text || ''
+  };
+  if (!filters.topic_id && !filters.form_topic_text && !payload.rebuild_all) {
+    throw new Error('กรุณาเลือกหัวข้อก่อนสร้างดัชนีตรวจงาน เพื่อป้องกันการประมวลผลทั้งระบบนานเกินไป');
+  }
+  const rows = buildReviewIndexRows_(filters);
+  const result = replaceReviewIndexRows_(filters, rows);
+  audit_('REBUILD_REVIEW_INDEX', SHEETS.REVIEW_INDEX, filters.topic_id || filters.form_topic_text || 'ALL', {}, result, 'ReviewIndex rebuilt');
+  return ok_(result, 'Review index rebuilt');
+}
+
+function parseJsonArray_(s) {
+  const v = parseJson_(s, []);
+  return Array.isArray(v) ? v : [];
+}
+
+function reviewIndexRowToSubmission_(r) {
+  const fileUrls = parseJsonArray_(r.file_urls_json);
+  const previewUrls = parseJsonArray_(r.preview_urls_json);
+  const maxLen = Math.max(fileUrls.length, previewUrls.length, Number(r.file_count || 0));
+  const files = [];
+  for (let i = 0; i < maxLen; i++) {
+    if (!fileUrls[i] && !previewUrls[i]) continue;
+    files.push({ file_no: i + 1, file_url: fileUrls[i] || r.first_file_url || '', preview_url: previewUrls[i] || r.first_preview_url || '' });
+  }
+  return {
+    submission_id: r.submission_id,
+    term_id: r.term_id,
+    offering_id: r.offering_id,
+    class_code: r.class_code,
+    topic_id: r.topic_id,
+    form_topic_text: r.form_topic_text,
+    student_id: r.student_id,
+    student_name: r.student_name,
+    timestamp: r.timestamp,
+    review_status: r.review_status,
+    score_status: r.score_status,
+    score: r.score,
+    file_count: r.file_count,
+    files: files
+  };
+}
+
+function listSubmissionsForReview(filters) {
+  filters = filters || {};
+  validate_(filters, { class_code: { maxLen: 20 }, topic_id: { maxLen: 80 }, form_topic_text: { maxLen: 300 }, review_status: { maxLen: 40 }, limit: { type: 'number' }, offset: { type: 'number' }, force_rebuild: { type: 'boolean' } });
+  const termId = filters.term_id || getActiveTerm_();
+  if (!filters.topic_id && !filters.form_topic_text) {
+    return ok_({ rows: [], offset:0, limit:Number(filters.limit || 30), total:0, hasMore:false, requiresTopic:true, message:'กรุณาเลือกหัวข้องานก่อนโหลดรายการตรวจ เพื่อให้ระบบทำงานเร็วและไม่ดึงข้อมูลทั้งภาคเรียน' }, 'Topic required');
+  }
+
+  const idxFilters = { term_id: termId, class_code: filters.class_code || '', topic_id: filters.topic_id || '', form_topic_text: filters.form_topic_text || '' };
+  ensureReviewIndexSheet_();
+  let indexRows = getRows_(SHEETS.REVIEW_INDEX).filter(function (r) { return topicMatchesFilter_(r, idxFilters); });
+
+  if (toBool_(filters.force_rebuild) || !indexRows.length) {
+    const rows = buildReviewIndexRows_(idxFilters);
+    replaceReviewIndexRows_(idxFilters, rows);
+    indexRows = rows;
+  }
+
+  if (filters.review_status) indexRows = indexRows.filter(function (r) { return String(r.review_status) === String(filters.review_status); });
+  indexRows.sort(function (a, b) { return String(b.timestamp || '').localeCompare(String(a.timestamp || '')); });
+
+  const offset = Math.max(0, Number(filters.offset || 0));
+  const limit = Math.max(1, Math.min(Number(filters.limit || getSetting_('REVIEW_PAGE_SIZE') || APP.REVIEW_PAGE_SIZE || 30), 30));
+  const pageRows = indexRows.slice(offset, offset + limit);
+
+  return ok_({
+    rows: pageRows.map(reviewIndexRowToSubmission_),
+    offset: offset,
+    limit: limit,
+    total: indexRows.length,
+    hasMore: offset + limit < indexRows.length,
+    source: 'ReviewIndex'
+  }, 'Submissions loaded from ReviewIndex');
+}
+
+function updateReviewIndexAfterReview_(submissionId, patch) {
+  try {
+    ensureReviewIndexSheet_();
+    updateRowById_(SHEETS.REVIEW_INDEX, 'submission_id', submissionId, Object.assign({}, patch, { updated_at: now_() }));
+  } catch (err) {
+    console.warn('updateReviewIndexAfterReview skipped', err);
+  }
+}
+
+function reviewSubmission(submissionId, action, reason, note) {
+  assertRole_(['ADMIN','TEACHER']);
+  validate_({ submissionId, action, reason, note }, { submissionId: { required: true, maxLen: 120 }, action: { required: true, maxLen: 40 }, reason: { maxLen: 300 }, note: { maxLen: 500 } });
+  const sub = findOne_(SHEETS.NORMALIZED_SUBMISSIONS, function (r) { return String(r.submission_id) === String(submissionId); });
+  if (!sub) throw new Error('Submission not found: ' + submissionId);
+  if (sub.offering_id) assertOfferingAccess_(sub.offering_id);
+  const oldReview = sub.review_status, oldScore = sub.score_status;
+  let newReview, newScore, ledgerStatus = null, voidReason = '';
+  switch (action) {
+    case REVIEW_ACTIONS.APPROVE: newReview = 'APPROVED'; newScore = 'ACTIVE'; ledgerStatus = 'ACTIVE'; break;
+    case REVIEW_ACTIONS.VOID_NO_STAMP: newReview = 'NO_STAMP'; newScore = 'VOIDED'; ledgerStatus = 'VOIDED'; voidReason = reason || 'ไม่มีตราปั๊ม'; break;
+    case REVIEW_ACTIONS.VOID_WRONG_TOPIC: newReview = 'WRONG_TOPIC'; newScore = 'VOIDED'; ledgerStatus = 'VOIDED'; voidReason = reason || 'ส่งผิดหัวข้อ'; break;
+    case REVIEW_ACTIONS.VOID_DUPLICATE: newReview = 'DUPLICATE'; newScore = 'VOIDED'; ledgerStatus = 'VOIDED'; voidReason = reason || 'ส่งซ้ำ'; break;
+    case REVIEW_ACTIONS.VOID_UNCLEAR_IMAGE: newReview = 'UNCLEAR'; newScore = 'VOIDED'; ledgerStatus = 'VOIDED'; voidReason = reason || 'รูปไม่ชัด'; break;
+    case REVIEW_ACTIONS.VOID_OTHER: newReview = 'VOIDED_OTHER'; newScore = 'VOIDED'; ledgerStatus = 'VOIDED'; voidReason = reason || 'ยกเลิกโดยครู'; break;
+    case REVIEW_ACTIONS.RESTORE_SCORE: newReview = 'APPROVED'; newScore = 'ACTIVE'; ledgerStatus = 'ACTIVE'; break;
+    default: throw new Error('Unknown review action: ' + action);
+  }
+  updateRowById_(SHEETS.NORMALIZED_SUBMISSIONS, 'submission_id', submissionId, { review_status:newReview, score_status:newScore, updated_at:now_(), note: note || sub.note || '' });
+  const ledger = findOne_(SHEETS.SCORE_LEDGER, function (r) { return String(r.source_ref) === String(submissionId); });
+  if (ledger && ledgerStatus) updateRowById_(SHEETS.SCORE_LEDGER, 'score_event_id', ledger.score_event_id, { status: ledgerStatus, void_reason: ledgerStatus === 'VOIDED' ? voidReason : '', updated_at: now_() });
+  appendObjects_(SHEETS.REVIEW_LOG, [{ review_id: uuid_('REV'), submission_id: submissionId, action, old_review_status: oldReview, new_review_status: newReview, old_score_status: oldScore, new_score_status: newScore, reason: reason || '', reviewed_by: getUserEmail_(), reviewed_at: now_(), note: note || '' }]);
+  updateReviewIndexAfterReview_(submissionId, { review_status: newReview, score_status: newScore });
+  audit_('REVIEW_SUBMISSION', SHEETS.NORMALIZED_SUBMISSIONS, submissionId, { oldReview, oldScore }, { newReview, newScore, action }, reason || '');
+  return ok_({ submission_id: submissionId, review_status:newReview, score_status:newScore }, 'Review saved');
+}

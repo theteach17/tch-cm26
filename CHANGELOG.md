@@ -1,34 +1,19 @@
-
-## v1.6.0-startup-diagnostics
-- Fixed startup single-point-of-failure that could leave all offering selectors blank while the database already contained CourseOfferings.
-- Added tolerant `api_bootstrap()` with partial diagnostics instead of hard failure.
-- Added `api_diagnoseStartup()` for real server-side diagnostics: user role, active term, offering count, and sheet row counts.
-- Updated frontend offering loading to accept both array and object API shapes.
-- Added visible "วิเคราะห์ปัญหา" button on the Start Session screen.
-
 # CHANGELOG
 
-## v1.5.0-session-ui-hotfix
+## v1.7.0-client-serialization-fix
+- Fixed root cause where the backend could read `CourseOfferings` but the browser dropdown stayed empty.
+- Added `sanitizeForClient_()` to convert Google Sheet `Date` objects and other non-plain values into JSON-safe strings before returning through `google.script.run`.
+- All `ok_()` and `fail_()` API bridge responses now sanitize their payloads automatically.
+- This resolves startup/bootstrap/listOfferings failures caused by rows containing `created_at` or other Date fields.
 
-### Fixed
-- แก้ปัญหาหน้าเปิดคาบเรียนไม่มีรายการห้อง/รายวิชา โดยเพิ่ม `api_listOfferings()` และ fallback `listUiOfferings_()` สำหรับ ADMIN
-- หน้า Web App โหลดรายการห้องใหม่ได้จากปุ่มในหน้าเปิดคาบเรียน
-- เพิ่ม session defaults จากเวลาระบบผ่าน `api_getSessionDefaults()`
+## v1.6.0-startup-diagnostics
+- Added startup diagnostics and fallback offering loading.
 
-### Added
-- ตารางคาบเรียนอัตโนมัติ:
-  - คาบ 1 08:20-09:10
-  - คาบ 2 09:10-10:00
-  - คาบ 3 10:00-10:50
-  - คาบ 4 10:50-11:40
-  - คาบ 5 11:50-12:40
-  - คาบ 6 12:40-13:30
-  - คาบ 7 13:30-14:20
-  - คาบ 8 14:20-15:10
-  - คาบ 9 15:10-16:00
-- `PERIOD_SCHEDULE_JSON` ใน SystemConfig เพื่อปรับตารางคาบได้ในอนาคตโดยไม่แก้โค้ด
-- UI ธีมใหม่แบบ professional dashboard พร้อม emoji/icon, gradient sidebar, hero bar และ period suggestion card
-
-### Notes
-- ถ้าอัปเดตจาก v1.4 ให้แทนที่ทุกไฟล์ใน Apps Script แล้ว Deploy เป็น New version
-- หลัง deploy ให้กด Initialize / Repair System หนึ่งครั้งเพื่อเพิ่มค่า `PERIOD_SCHEDULE_JSON`
+## v1.8.0-review-performance-date
+- Fixed date UX on Start Session: visible date is now Thai Buddhist-year display while backend still receives ISO `yyyy-MM-dd`.
+- Added review topic selector after class selection.
+- Prevented review page from loading an entire class/term without a topic filter.
+- Added `ReviewIndex` sheet for fast review listing and denormalized preview URLs.
+- Added `api_listReviewTopics()` and `api_rebuildReviewIndex()`.
+- Reworked `api_listSubmissionsForReview()` to use ReviewIndex, topic-required flow, 30-row pagination, and lazy images.
+- Review actions now update ReviewIndex status to keep UI responsive.

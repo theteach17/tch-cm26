@@ -19,7 +19,12 @@
               <button class="btn btn-outline-secondary" type="button" onclick="reloadOfferingsUI()">โหลดใหม่</button><button class="btn btn-outline-danger" type="button" onclick="diagnoseStartupUI('sessionResult')">วิเคราะห์ปัญหา</button>
             </div>
           </div>
-          <div class="col-md-3"><label class="form-label">📅 วันที่</label><input id="sessionDate" type="date" class="form-control"></div>
+          <div class="col-md-3">
+            <label class="form-label">📅 วันที่</label>
+            <input id="sessionDate" type="hidden">
+            <div id="sessionDateThai" class="date-display-box">กำลังคำนวณวันที่...</div>
+            <div id="sessionDateIsoText" class="small-muted mt-1"></div>
+          </div>
           <div class="col-md-3"><label class="form-label">⏰ คาบที่</label><input id="periodNo" class="form-control" placeholder="เช่น 4"></div>
           <div class="col-md-6"><label class="form-label">📖 หัวข้อการสอน</label><input id="lessonTitle" class="form-control" placeholder="เช่น Prefix Practice"></div>
           <div class="col-md-6"><label class="form-label">📝 หัวข้อใน Google Form</label><input id="formTopicText" class="form-control" placeholder="เช่น Prefix - 29 May 2026"></div>

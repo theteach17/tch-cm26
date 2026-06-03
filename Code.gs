@@ -140,7 +140,9 @@ function api_getActiveSessions() { return guardedCall_(['ADMIN','TEACHER'], getA
 function api_getScanBootstrap(sessionId) { return guardedCall_(['ADMIN','TEACHER'], getScanBootstrap, sessionId); }
 function api_processScanBatch(sessionId, scans) { return guardedCall_(['ADMIN','TEACHER'], processScanBatch, sessionId, scans || []); }
 function api_markAbsentForSession(sessionId) { return guardedCall_(['ADMIN','TEACHER'], markAbsentForSession, sessionId); }
+function api_listReviewTopics(filters) { return guardedCall_(['ADMIN','TEACHER'], listReviewTopics, filters || {}); }
 function api_listSubmissionsForReview(filters) { return guardedCall_(['ADMIN','TEACHER'], listSubmissionsForReview, filters || {}); }
+function api_rebuildReviewIndex(payload) { return guardedCall_(['ADMIN','TEACHER'], rebuildReviewIndex, payload || {}); }
 function api_reviewSubmission(submissionId, action, reason, note) { return guardedCall_(['ADMIN','TEACHER'], reviewSubmission, submissionId, action, reason, note); }
 function api_randomBookCheck(sessionId, count) { return guardedCall_(['ADMIN','TEACHER'], randomBookCheck, sessionId, count); }
 function api_saveBookCheckResult(payload) { return guardedCall_(['ADMIN','TEACHER'], saveBookCheckResult, payload || {}); }

@@ -34,22 +34,19 @@
 6. Deploy เป็น Web App
 7. เปิด Web App แล้วใช้งานเมนู Setup / Sync / Topic / Attendance / Review / Gradebook
 
-## ค่าเริ่มต้นที่ฝังไว้
+## การตั้งค่า Spreadsheet ID
 
-Database Spreadsheet ID:
-`1Xs7L1kxtUBDcXiXcYXhStDEaxGV2SdUaZZa9QnbVdpo`
+เพื่อความปลอดภัย ระบบไม่ฝัง Spreadsheet ID จริงในโค้ดหรือเอกสารที่ใช้บน GitHub ให้ตั้งค่าจาก Apps Script editor เท่านั้น เช่น
 
-Source Form Response Spreadsheet ID:
-`1P8MJ8PPzXg9TkApNl529NOj8UverQ-5hV498Hk0TXpQ`
+```javascript
+setDbSpreadsheetId('<DB_SPREADSHEET_ID>');
+initializeSystem({
+  sourceSpreadsheetId: '<FORM_RESPONSE_SPREADSHEET_ID>',
+  sourceSheetName: 'Form Responses 1'
+});
+```
 
-Source Sheet:
-`Form Responses 1`
-
-Active Term:
-`AY2569-T1`
-
-Attendance score start date:
-`2026-06-01`
+ตรวจ Google Drive sharing ของไฟล์ฐานข้อมูลและไฟล์คำตอบ Form ให้เป็น `Restricted` เสมอ
 
 ## ข้อควรทราบ
 
@@ -68,3 +65,11 @@ Attendance score start date:
 - Fixed frontend JavaScript syntax error in `Index.html` that made all Web App buttons unresponsive after v1.1 timeout hotfix.
 - Replaced unsafe multiline string literal in `syncAllUI()` with escaped `\n`.
 - Verified the client-side `<script>` block using a JavaScript syntax check.
+
+
+## v1.8.0 Review Performance + Thai Date
+- แก้วันที่หน้าเปิดคาบไม่ให้แสดงแบบ MM/DD/YYYY โดยแสดงเป็นวันที่ไทย และส่งค่า backend เป็น ISO yyyy-MM-dd
+- เพิ่ม dropdown หัวข้องานในหน้า Review หลังเลือกห้อง
+- ป้องกันการโหลดงานทั้งห้อง/ทั้งภาคเรียนโดยไม่เลือกหัวข้อ
+- เพิ่ม ReviewIndex เพื่อโหลดงานตรวจจากดัชนีแบบเร็ว พร้อม pagination 30 รายการ
+- เพิ่มปุ่มรีเฟรชดัชนีเฉพาะหัวข้อที่เลือก
