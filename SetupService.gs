@@ -38,7 +38,11 @@ function seedDefaults_(options) {
     ['DEFAULT_BOOK_BROUGHT_SCORE', '1', 'number', 'Book brought score'],
     ['DEFAULT_BOOK_NOT_BROUGHT_SCORE', '-1', 'number', 'Book not brought score'],
     ['RANDOM_BOOK_CHECK_COUNT', '5', 'number', 'Default random book check count'],
-    ['SCAN_DUPLICATE_WINDOW_SECONDS', '8', 'number', 'Client duplicate scan window']
+    ['SCAN_DUPLICATE_WINDOW_SECONDS', '8', 'number', 'Client duplicate scan window'],
+    ['AUTO_CREATE_TOPICS_FROM_FORM', 'TRUE', 'boolean', 'Automatically create TopicMap for new Google Form topics during sync'],
+    ['AUTO_RESOLVE_TOPIC_ERRORS', 'TRUE', 'boolean', 'Automatically mark TOPIC_NOT_MAPPED errors as resolved after auto-mapping'],
+    ['AUTO_CREATE_CLASSES_OFFERINGS', 'TRUE', 'boolean', 'Automatically create class and course offering when a class appears in Form data'],
+    ['TOPIC_NOT_MAPPED_LOG_MODE', 'SUMMARY', 'text', 'SUMMARY avoids one error row per student for missing topics']
   ];
   defaults.forEach(d => setSetting_(d[0], d[1], d[2], d[3]));
 

@@ -149,3 +149,171 @@ function reviewSubmission(submissionId, action, reason, note) {
   audit_('REVIEW_SUBMISSION', SHEETS.NORMALIZED_SUBMISSIONS, submissionId, { oldReview, oldScore }, { newReview, newScore, action }, reason || '');
   return ok_({ submission_id: submissionId, review_status:newReview, score_status:newScore }, 'Review saved');
 }
+
+/**
+ * v1.3 automation: create TopicMap automatically from existing pending submissions,
+ * re-score them, update files, and resolve noisy TOPIC_NOT_MAPPED errors.
+ * This is safe to run repeatedly; it is idempotent by topic_id and score source_ref.
+ */
+function autoMapAndReprocessTopics(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  const termIdFilter = payload.term_id || getActiveTerm_();
+  const classFilter = String(payload.class_code || '').trim();
+  const source = getActiveSource_() || { source_id: 'AUTO', term_id: termIdFilter };
+  const context = buildSyncContext_(source);
+  const submissions = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(r => {
+    if (termIdFilter && String(r.term_id) !== String(termIdFilter)) return false;
+    if (classFilter && String(r.class_code) !== classFilter) return false;
+    if (!normalizeText_(r.form_topic_text)) return false;
+    return !r.topic_id || String(r.score_status) === 'PENDING_TOPIC' || String(r.note || '').indexOf('Waiting for TopicMap') >= 0;
+  });
+
+  const topicBySubmissionId = {};
+  const topicKeys = {};
+  submissions.forEach(r => {
+    const termId = r.term_id || termIdFilter;
+    const classCode = String(r.class_code || '').trim();
+    const offering = ensureOfferingForContext_(context, termId, classCode);
+    const topic = ensureTopicForContext_(context, termId, classCode, r.form_topic_text, offering, r.timestamp);
+    if (topic) {
+      topicBySubmissionId[String(r.submission_id)] = topic;
+      topicKeys[[termId, classCode, normalizeText_(r.form_topic_text)].join('|')] = topic;
+    }
+  });
+  appendAutomationObjects_(context);
+
+  const updatedSubs = bulkApplyTopicToSubmissions_(topicBySubmissionId);
+  const updatedFiles = bulkApplyTopicToFiles_(topicBySubmissionId);
+  const scoreRows = buildScoresForMappedSubmissions_(submissions, topicBySubmissionId);
+  appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
+  const resolvedErrors = bulkResolveTopicErrors_(topicKeys, termIdFilter);
+
+  audit_('AUTO_MAP_AND_REPROCESS_TOPICS', SHEETS.TOPIC_MAP, termIdFilter, {}, {
+    submissions_scanned: submissions.length,
+    topics_created: Object.keys(context.topicsToAppend || {}).length,
+    submissions_updated: updatedSubs,
+    files_updated: updatedFiles,
+    scores_created: scoreRows.length,
+    errors_resolved: resolvedErrors
+  }, 'Automatic TopicMap repair and reprocess completed');
+
+  return ok_({
+    submissions_scanned: submissions.length,
+    topics_created: Object.keys(context.topicsToAppend || {}).length,
+    submissions_updated: updatedSubs,
+    files_updated: updatedFiles,
+    scores_created: scoreRows.length,
+    errors_resolved: resolvedErrors
+  }, 'Auto mapping and reprocess completed');
+}
+
+function bulkApplyTopicToSubmissions_(topicBySubmissionId) {
+  const ids = Object.keys(topicBySubmissionId || {});
+  if (!ids.length) return 0;
+  const idSet = new Set(ids);
+  const sh = sh_(SHEETS.NORMALIZED_SUBMISSIONS);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  const map = {}; headers.forEach((h,i)=>map[h]=i);
+  const values = sh.getRange(2,1,lastRow-1,lastCol).getValues();
+  let changed = 0;
+  values.forEach(row => {
+    const subId = String(row[map.submission_id] || '');
+    if (!idSet.has(subId)) return;
+    const topic = topicBySubmissionId[subId];
+    row[map.topic_id] = topic.topic_id;
+    row[map.offering_id] = topic.offering_id || row[map.offering_id] || '';
+    row[map.score_status] = 'ACTIVE';
+    row[map.score] = topic.score;
+    row[map.updated_at] = now_();
+    row[map.note] = '';
+    changed++;
+  });
+  if (changed) sh.getRange(2,1,lastRow-1,lastCol).setValues(values);
+  return changed;
+}
+
+function bulkApplyTopicToFiles_(topicBySubmissionId) {
+  const ids = Object.keys(topicBySubmissionId || {});
+  if (!ids.length) return 0;
+  const idSet = new Set(ids);
+  const sh = sh_(SHEETS.SUBMISSION_FILES);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  const map = {}; headers.forEach((h,i)=>map[h]=i);
+  const values = sh.getRange(2,1,lastRow-1,lastCol).getValues();
+  let changed = 0;
+  values.forEach(row => {
+    const subId = String(row[map.submission_id] || '');
+    if (!idSet.has(subId)) return;
+    const topic = topicBySubmissionId[subId];
+    row[map.topic_id] = topic.topic_id;
+    changed++;
+  });
+  if (changed) sh.getRange(2,1,lastRow-1,lastCol).setValues(values);
+  return changed;
+}
+
+function buildScoresForMappedSubmissions_(submissions, topicBySubmissionId) {
+  const existingSourceRefs = new Set(getRows_(SHEETS.SCORE_LEDGER).map(r => String(r.source_ref)));
+  const scores = [];
+  submissions.forEach(r => {
+    const subId = String(r.submission_id || '');
+    const topic = topicBySubmissionId[subId];
+    if (!topic || existingSourceRefs.has(subId)) return;
+    scores.push({
+      score_event_id: 'SCORE-' + subId,
+      term_id: r.term_id,
+      event_date: toDateOnly_(r.timestamp || now_()),
+      session_id: '',
+      offering_id: topic.offering_id || r.offering_id || '',
+      class_code: r.class_code,
+      student_id: r.student_id,
+      event_type: 'FORM_SUBMISSION',
+      score_title: topic.display_topic_name || r.form_topic_text,
+      score_delta: topic.score,
+      source_type: 'GOOGLE_FORM_AUTO_TOPIC',
+      source_ref: subId,
+      status: 'ACTIVE',
+      void_reason: '',
+      created_by: 'SYSTEM_AUTO_REPROCESS',
+      created_at: now_(),
+      updated_at: now_()
+    });
+    existingSourceRefs.add(subId);
+  });
+  return scores;
+}
+
+function bulkResolveTopicErrors_(topicKeys, termId) {
+  if (!topicKeys || !Object.keys(topicKeys).length) return 0;
+  if (getSetting_('AUTO_RESOLVE_TOPIC_ERRORS') !== '' && !toBool_(getSetting_('AUTO_RESOLVE_TOPIC_ERRORS'))) return 0;
+  const sh = sh_(SHEETS.ERROR_LOG);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return 0;
+  const lastCol = sh.getLastColumn();
+  const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+  const map = {}; headers.forEach((h,i)=>map[h]=i);
+  const values = sh.getRange(2,1,lastRow-1,lastCol).getValues();
+  let resolved = 0;
+  values.forEach(row => {
+    if (String(row[map.error_type]) !== 'TOPIC_NOT_MAPPED') return;
+    if (String(row[map.status]) === 'RESOLVED') return;
+    const raw = parseJson_(row[map.raw_value], {});
+    const classCode = String(raw.classCode || raw.class_code || '').trim();
+    const topicText = normalizeText_(raw.topicText || raw.form_topic_text || '');
+    const key = [termId || getActiveTerm_(), classCode, topicText].join('|');
+    if (!topicKeys[key]) return;
+    row[map.status] = 'RESOLVED';
+    row[map.resolved_by] = getUserEmail_() || 'SYSTEM_AUTO_REPAIR';
+    row[map.resolved_at] = now_();
+    resolved++;
+  });
+  if (resolved) sh.getRange(2,1,lastRow-1,lastCol).setValues(values);
+  return resolved;
+}

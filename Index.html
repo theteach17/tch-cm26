@@ -44,6 +44,7 @@
         <button class="btn btn-primary" onclick="initializeSystemUI()">Initialize / Repair System</button>
         <button class="btn btn-outline-primary" onclick="detectHeadersUI()">Detect Form Headers</button>
         <button class="btn btn-outline-secondary" onclick="installTriggerUI()">ติดตั้ง Sync Trigger ทุก 5 นาที</button>
+        <button class="btn btn-success" onclick="autoRepairUI()">ซ่อมอัตโนมัติ: สร้างหัวข้อ/คืนสถานะ Error</button>
       </div>
       <div class="card p-3"><pre id="setupResult" class="mb-0"></pre></div>
     </section>
@@ -95,6 +96,7 @@
           <div class="col-md-3"><label class="form-label">โหมด</label><select id="topicSyncMode" class="form-select"><option>LIVE</option><option>RETROACTIVE</option></select></div>
           <div class="col-md-3 d-flex align-items-end"><button class="btn btn-outline-info w-100" onclick="discoverTopicsUI()">ค้นหัวข้อจริงจาก Form</button></div>
           <div class="col-md-3 d-flex align-items-end"><button class="btn btn-success w-100" onclick="saveTopicUI()">บันทึกหัวข้อ</button></div>
+          <div class="col-md-6 d-flex align-items-end"><button class="btn btn-warning w-100" onclick="autoMapTopicsUI()">สร้างหัวข้องานอัตโนมัติจากรายการที่ Sync แล้ว</button></div>
         </div>
       </div>
       <div class="card p-3"><div id="topicResults"></div></div>
@@ -105,6 +107,7 @@
       <div class="card p-3">
         <button class="btn btn-primary" onclick="syncNewUI()">Sync เฉพาะรายการใหม่</button>
         <button class="btn btn-warning" onclick="syncAllUI()">Sync ทั้งหมด / Rebuild จากต้นทาง</button>
+        <button class="btn btn-success" onclick="autoRepairUI()">Auto Fix หัวข้อ/คะแนน/Error</button>
         <pre id="syncResult" class="mt-3"></pre>
       </div>
     </section>
@@ -157,6 +160,21 @@ async function bootstrap(){initNav();document.getElementById('sessionDate').valu
 async function initializeSystemUI(){const r=await call('api_initializeSystem',{});document.getElementById('setupResult').textContent=pretty(r);toast('Initialize สำเร็จ');bootstrap();}
 async function detectHeadersUI(){const r=await call('api_detectFormHeaders');document.getElementById('setupResult').textContent=pretty(r.data);}
 async function installTriggerUI(){const r=await call('api_installSyncTrigger',5);document.getElementById('setupResult').textContent=pretty(r);}
+async function autoMapTopicsUI(){
+  const cls=document.getElementById('topicClass').value;
+  const r=await call('api_autoMapAndReprocessTopics',{class_code:cls});
+  document.getElementById('topicResults').innerHTML='<pre>'+pretty(r.data)+'</pre>';
+  toast('สร้างหัวข้อและประมวลผลรายการค้างอัตโนมัติแล้ว');
+}
+async function autoRepairUI(){
+  const resultBox=document.querySelector('.section.active pre')||document.getElementById('syncResult')||document.getElementById('setupResult');
+  if(resultBox) resultBox.textContent='กำลังซ่อมอัตโนมัติ: สร้าง TopicMap, reprocess งานค้าง, resolve ErrorLog...';
+  const r=await call('api_autoRepairSystem',{});
+  if(resultBox) resultBox.textContent=pretty(r.data);
+  toast('ซ่อมอัตโนมัติสำเร็จ');
+  loadDashboard();
+}
+
 async function loadDashboard(){const r=await call('api_getDashboardData');const d=r.data;document.getElementById('dashCards').innerHTML=[['คาบที่เปิด',d.activeSessions.length],['ส่งงานทั้งหมด',d.submissions],['รอตรวจ',d.pendingReview],['ถูกยกเลิก',d.voided],['เช็กชื่อวันนี้',d.attendanceToday]].map(x=>`<div class="col-md"><div class="card p-3"><div>${x[0]}</div><div class="stat">${x[1]}</div></div></div>`).join('');document.getElementById('activeSessions').innerHTML=d.activeSessions.length?d.activeSessions.map(s=>`<div class="border rounded p-2 mb-2"><b>${s.class_code}</b> ${s.lesson_title||''} | ${s.session_date} คาบ ${s.period_no} <button class="btn btn-sm btn-outline-secondary float-end" onclick="closeSessionUI('${s.session_id}')">ปิดคาบ</button></div>`).join(''):'ไม่มีคาบที่เปิดอยู่';}
 async function startSessionUI(){const sel=document.getElementById('sessionOffering');const r=await call('api_startSession',{offering_id:sel.value,class_code:sel.selectedOptions[0]?.dataset.class,session_date:document.getElementById('sessionDate').value,period_no:document.getElementById('periodNo').value,lesson_title:document.getElementById('lessonTitle').value,form_topic_text:document.getElementById('formTopicText').value,submission_score:document.getElementById('submissionScore').value,attendance_enabled:document.getElementById('attendanceEnabled').checked,book_check_enabled:document.getElementById('bookCheckEnabled').checked});document.getElementById('sessionResult').innerHTML=`<div class="alert alert-success">เริ่มคาบแล้ว: ${r.data.session.session_id}</div>`;loadActiveSessionsUI();}
 async function closeSessionUI(id){await call('api_closeSession',id);toast('ปิดคาบแล้ว');loadDashboard();loadActiveSessionsUI();}
@@ -173,7 +191,8 @@ async function syncNewUI(){
   const box=document.getElementById('syncResult');
   box.textContent='กำลัง Sync รายการใหม่แบบแบ่งชุด...';
   const r=await call('api_syncNewFormRows');
-  box.textContent=pretty(r.data);
+  const fix=await call('api_autoMapAndReprocessTopics',{});
+  box.textContent=pretty({sync:r.data, autoFix:fix.data});
 }
 async function syncAllUI(){
   if(!confirm('Sync ทั้งหมด / Rebuild จะประมวลผลแบบแบ่งชุดเพื่อป้องกัน Timeout ต้องการดำเนินการหรือไม่')) return;
@@ -191,7 +210,9 @@ async function syncAllUI(){
     box.textContent='ประมวลผลถึงแถว '+(d.endRow||'-')+' / '+(d.lastRow||'-')+' ('+(d.percent||0)+'%)\n'+pretty(total);
     await new Promise(resolve=>setTimeout(resolve,250));
   }
-  box.textContent='Sync ทั้งหมดเสร็จแล้ว\n'+pretty({summary:total,lastChunk:last});
+  box.textContent='Sync ทั้งหมดเสร็จแล้ว กำลัง Auto Fix หัวข้อ/คะแนน/Error...\n'+pretty({summary:total,lastChunk:last});
+  const fix=await call('api_autoMapAndReprocessTopics',{});
+  box.textContent='Sync ทั้งหมดและ Auto Fix เสร็จแล้ว\n'+pretty({summary:total,lastChunk:last,autoFix:fix.data});
 }
 async function loadReviewUI(){const r=await call('api_listSubmissionsForReview',{class_code:document.getElementById('reviewClass').value,review_status:document.getElementById('reviewStatus').value,limit:120});document.getElementById('reviewList').innerHTML=r.data.map(sub=>`<div class="col-md-4"><div class="card p-3 h-100"><div><b>${sub.student_name||sub.student_id}</b> <span class="badge text-bg-light">${sub.class_code}</span></div><div class="small-muted">${sub.form_topic_text}<br>${sub.timestamp}</div><div class="d-flex gap-2 flex-wrap my-2">${(sub.files||[]).map(f=>`<a href="${f.file_url}" target="_blank"><img class="img-thumb" src="${f.preview_url}" onerror="this.style.display='none'"></a>`).join('')}</div><div class="mb-2"><span class="badge text-bg-info">${sub.review_status}</span> <span class="badge text-bg-secondary">${sub.score_status}</span></div><div class="btn-group flex-wrap"><button class="btn btn-sm btn-success" onclick="review('${sub.submission_id}','APPROVE')">ผ่าน</button><button class="btn btn-sm btn-danger" onclick="review('${sub.submission_id}','VOID_NO_STAMP','ไม่มีตราปั๊ม')">ไม่มีตรา</button><button class="btn btn-sm btn-warning" onclick="review('${sub.submission_id}','VOID_WRONG_TOPIC','ส่งผิดหัวข้อ')">ผิดหัวข้อ</button><button class="btn btn-sm btn-outline-secondary" onclick="review('${sub.submission_id}','RESTORE_SCORE')">คืนคะแนน</button></div></div></div>`).join('')||'<div class="alert alert-info">ไม่พบรายการ</div>';}
 async function review(id,action,reason=''){await call('api_reviewSubmission',id,action,reason,'');toast('บันทึกผลตรวจแล้ว');loadReviewUI();}

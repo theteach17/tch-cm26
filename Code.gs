@@ -38,3 +38,10 @@ function api_getGradebook(payload) { return getGradebook(payload || {}); }
 function api_regenerateRoomSheets() { return regenerateActiveRoomSheets(); }
 function api_createTermArchive(termId) { return createTermArchive(termId); }
 function api_installSyncTrigger(minutes) { return installTimeDrivenSyncTrigger(minutes || 5); }
+function api_autoMapAndReprocessTopics(payload) { return autoMapAndReprocessTopics(payload || {}); }
+function api_autoRepairSystem(payload) {
+  const a = autoMapAndReprocessTopics(payload || {});
+  let rooms = null;
+  try { rooms = regenerateActiveRoomSheets(); } catch (err) { rooms = fail_(err.message); }
+  return ok_({ autoMap: a.data, roomSheets: rooms && rooms.data ? rooms.data : rooms }, 'Auto repair completed');
+}

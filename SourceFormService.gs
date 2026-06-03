@@ -144,12 +144,12 @@ function syncFormRows_(source, startRow, endRow, options) {
     });
   });
 
+  appendAutomationObjects_(context);
   appendObjects_(SHEETS.RAW_FORM_ROWS, rawRows);
   appendObjects_(SHEETS.NORMALIZED_SUBMISSIONS, submissions);
   appendObjects_(SHEETS.SUBMISSION_FILES, files);
   appendObjects_(SHEETS.SCORE_LEDGER, scores);
-  appendMissingStudentsAndEnrollments_(context);
-  if (errorRows.length) appendObjects_(SHEETS.ERROR_LOG, errorRows);
+  if (errorRows.length) appendObjects_(SHEETS.ERROR_LOG, compactErrorRows_(errorRows));
   if (options.advanceCursor !== false) updateRowById_(SHEETS.SOURCE_FORMS, 'source_id', source.source_id, { last_sync_row: boundedEnd, last_sync_time: now_() });
 
   const hasMore = boundedEnd < lastRow;
@@ -178,22 +178,35 @@ function buildSyncContext_(source) {
     if (s.student_pay_code) byRfid[cleanId_(s.student_pay_code)] = s;
     if (s.backup_card_code) byRfid[cleanId_(s.backup_card_code)] = s;
   });
+  const existingClasses = new Set(getRows_(SHEETS.CLASSES).map(r => String(r.class_code)));
   return {
+    source,
     maps: getHeaderMaps_(source.source_id),
     topicMap: buildTopicMap_(),
     offerings: buildOfferingMap_(),
     studentMap: { byId, byRfid },
     existingRaw: new Set(getRows_(SHEETS.RAW_FORM_ROWS).map(r => String(r.row_hash))),
     existingSub: new Set(getRows_(SHEETS.NORMALIZED_SUBMISSIONS).map(r => String(r.submission_key))),
+    existingScores: new Set(getRows_(SHEETS.SCORE_LEDGER).map(r => String(r.source_ref))),
     existingEnrollments: new Set(getRows_(SHEETS.ENROLLMENTS).map(r => String(r.enrollment_id))),
+    existingClasses,
     studentsToAppend: {},
-    enrollmentsToAppend: {}
+    enrollmentsToAppend: {},
+    classesToAppend: {},
+    offeringsToAppend: {},
+    topicsToAppend: {}
   };
 }
 
-function appendMissingStudentsAndEnrollments_(context) {
+function appendAutomationObjects_(context) {
+  const classes = Object.values(context.classesToAppend || {});
+  const offerings = Object.values(context.offeringsToAppend || {});
+  const topics = Object.values(context.topicsToAppend || {});
   const students = Object.values(context.studentsToAppend || {});
   const enrollments = Object.values(context.enrollmentsToAppend || {});
+  if (classes.length) appendObjects_(SHEETS.CLASSES, classes);
+  if (offerings.length) appendObjects_(SHEETS.COURSE_OFFERINGS, offerings);
+  if (topics.length) appendObjects_(SHEETS.TOPIC_MAP, topics);
   if (students.length) appendObjects_(SHEETS.STUDENTS, students);
   if (enrollments.length) appendObjects_(SHEETS.ENROLLMENTS, enrollments);
 }
@@ -217,6 +230,94 @@ function buildOfferingMap_() {
     map[[r.term_id, r.class_code].join('|')] = r;
   });
   return map;
+}
+
+function autoCreateTopicsEnabled_() { return getSetting_('AUTO_CREATE_TOPICS_FROM_FORM') === '' || toBool_(getSetting_('AUTO_CREATE_TOPICS_FROM_FORM')); }
+function autoCreateOfferingsEnabled_() { return getSetting_('AUTO_CREATE_CLASSES_OFFERINGS') === '' || toBool_(getSetting_('AUTO_CREATE_CLASSES_OFFERINGS')); }
+
+function ensureOfferingForContext_(context, termId, classCode) {
+  const key = [termId, classCode].join('|');
+  if (context.offerings[key]) return context.offerings[key];
+  if (!classCode || !autoCreateOfferingsEnabled_()) return null;
+  if (!context.existingClasses.has(String(classCode)) && !context.classesToAppend[String(classCode)]) {
+    const grade = Math.floor(Number(classCode) / 100);
+    const room = Number(classCode) % 100;
+    context.classesToAppend[String(classCode)] = {
+      class_code: classCode, class_text: classCodeToText_(classCode), grade_level: grade || '', room: room || '',
+      school_year: String(termId).match(/AY(\d+)/) ? String(termId).match(/AY(\d+)/)[1] : '', is_active: true,
+      note: 'Auto-created from Google Form response'
+    };
+    context.existingClasses.add(String(classCode));
+  }
+  const inferred = inferCourseForClass_(classCode);
+  const offeringId = [termId, inferred.course_code.replace(/[^A-Za-z0-9ก-๙]/g,''), classCode].join('-');
+  const offering = {
+    offering_id: offeringId, term_id: termId, course_id: inferred.course_id, course_code: inferred.course_code,
+    class_code: classCode, class_text: classCodeToText_(classCode), teacher_email: getUserEmail_(),
+    status: 'ACTIVE', created_at: now_(), note: 'Auto-created because class appeared in Google Form response'
+  };
+  context.offerings[key] = offering;
+  context.offeringsToAppend[offeringId] = offering;
+  return offering;
+}
+
+function inferCourseForClass_(classCode) {
+  const grade = Math.floor(Number(classCode) / 100);
+  if (grade >= 6) return { course_id: 'COURSE-ENG33208', course_code: 'อ33208' };
+  return { course_id: 'COURSE-ENG22101', course_code: 'อ22101' };
+}
+
+function ensureTopicForContext_(context, termId, classCode, topicText, offering, timestamp) {
+  topicText = normalizeText_(topicText);
+  if (!topicText) return null;
+  const key = [termId, classCode, topicText].join('|');
+  if (context.topicMap[key]) return context.topicMap[key];
+  if (!autoCreateTopicsEnabled_()) return null;
+  offering = offering || ensureOfferingForContext_(context, termId, classCode);
+  const topicId = 'TOPIC-' + digest_([termId, offering ? offering.offering_id : '', classCode, topicText].join('|'), 18);
+  const topic = {
+    topic_id: topicId, term_id: termId, offering_id: offering ? offering.offering_id : '', class_code: classCode,
+    form_topic_text: topicText, display_topic_name: buildDisplayTopicName_(topicText),
+    assigned_date: inferDateFromTopic_(topicText, timestamp), due_date: '',
+    score: getSetting_('DEFAULT_SUBMISSION_SCORE') || 1, sync_mode: 'AUTO_MAPPED', duplicate_policy: 'LATEST',
+    status: 'ACTIVE', created_by: 'SYSTEM_AUTO_TOPIC', created_at: now_(), note: 'Auto-created from Google Form topic during sync'
+  };
+  context.topicMap[key] = topic;
+  context.topicsToAppend[topicId] = topic;
+  return topic;
+}
+
+function buildDisplayTopicName_(topicText) {
+  return normalizeText_(String(topicText || '').replace(/\s*-?\s*\d{1,2}\s+(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)\s+\d{4}\s*$/i, '').replace(/\s*-?\s*\d{4}-\d{2}-\d{2}\s*$/,'')) || normalizeText_(topicText);
+}
+
+function inferDateFromTopic_(topicText, fallbackDate) {
+  const s = String(topicText || '');
+  const m = s.match(/(\d{1,2})\s+(Jan|January|Feb|February|Mar|March|Apr|April|May|Jun|June|Jul|July|Aug|August|Sep|Sept|September|Oct|October|Nov|November|Dec|December)\s+(\d{4})/i);
+  if (m) {
+    const months = {jan:0,january:0,feb:1,february:1,mar:2,march:2,apr:3,april:3,may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,sep:8,sept:8,september:8,oct:9,october:9,nov:10,november:10,dec:11,december:11};
+    const d = new Date(Number(m[3]), months[m[2].toLowerCase()], Number(m[1]));
+    return toDateOnly_(d);
+  }
+  return fallbackDate ? toDateOnly_(fallbackDate) : toDateOnly_(now_());
+}
+
+function compactErrorRows_(rows) {
+  if (!rows || !rows.length) return [];
+  if (String(getSetting_('TOPIC_NOT_MAPPED_LOG_MODE') || 'SUMMARY').toUpperCase() !== 'SUMMARY') return rows;
+  const out = {}, passthrough = [];
+  rows.forEach(e => {
+    if (e.error_type !== 'TOPIC_NOT_MAPPED') { passthrough.push(e); return; }
+    const raw = parseJson_(e.raw_value, {});
+    const key = [e.error_type, raw.classCode || '', raw.topicText || ''].join('|');
+    if (!out[key]) out[key] = Object.assign({}, e, { error_id: uuid_('ERR'), source_row: '', raw_value: safeJson_({ classCode: raw.classCode || '', topicText: raw.topicText || '', count: 0, sampleStudentIds: [] }) });
+    const data = parseJson_(out[key].raw_value, {});
+    data.count = Number(data.count || 0) + 1;
+    if (raw.studentId && data.sampleStudentIds.length < 10) data.sampleStudentIds.push(raw.studentId);
+    out[key].raw_value = safeJson_(data);
+    out[key].error_message = 'Topic is not mapped yet: ' + (raw.topicText || '') + ' (summary)';
+  });
+  return Object.values(out).concat(passthrough);
 }
 
 function buildStudentMap_() {
@@ -252,8 +353,8 @@ function normalizeSourceRow_(source, headers, row, sourceRow, context) {
     let classCode = groupKey === 'GENERIC' ? classTextToCode_(classTextGlobal) : groupKey;
     if (!classCode) classCode = classTextToCode_(classTextGlobal);
     const termId = source.term_id || getActiveTerm_();
-    const offering = context.offerings[[termId, classCode].join('|')];
-    const topic = context.topicMap[[termId, classCode, topicText].join('|')];
+    const offering = ensureOfferingForContext_(context, termId, classCode);
+    const topic = ensureTopicForContext_(context, termId, classCode, topicText, offering, timestamp);
     const submissionKey = digest_([source.source_id, sourceRow, classCode, studentId, topicText, fileUrls.join('|')].join('|'), 32);
     const submissionId = 'SUB-' + submissionKey.slice(0, 18);
     const score = topic ? numericOrZero_(topic.score) : 0;
