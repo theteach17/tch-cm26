@@ -51,8 +51,37 @@ function lock_(timeoutMs) {
   lock.waitLock(timeoutMs || 30000);
   return lock;
 }
-function ok_(data, message) { return { ok: true, message: message || 'success', data: data || null }; }
-function fail_(message, data) { return { ok: false, message: message || 'error', data: data || null }; }
+/**
+ * HtmlService / google.script.run cannot reliably return Date objects or other
+ * non-plain values to the browser.  In v1.6 the startup diagnostic showed that
+ * the server could read 9 CourseOfferings, but the browser select stayed empty.
+ * The root cause is that rows read from Google Sheets can contain Date objects
+ * such as created_at, and returning those rows inside api_bootstrap/api_listOfferings
+ * can make google.script.run fail before the frontend receives offerings.
+ *
+ * Every API response must therefore be sanitized into JSON-safe primitives.
+ */
+function sanitizeForClient_(value) {
+  if (value === null || value === undefined) return value;
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    if (isNaN(value.getTime())) return '';
+    return Utilities.formatDate(value, APP.TIMEZONE || Session.getScriptTimeZone() || 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss');
+  }
+  const t = typeof value;
+  if (t === 'string' || t === 'number' || t === 'boolean') return value;
+  if (Array.isArray(value)) return value.map(sanitizeForClient_);
+  if (t === 'object') {
+    const out = {};
+    Object.keys(value).forEach(function (k) {
+      const v = value[k];
+      if (typeof v !== 'function') out[k] = sanitizeForClient_(v);
+    });
+    return out;
+  }
+  return String(value);
+}
+function ok_(data, message) { return { ok: true, message: message || 'success', data: sanitizeForClient_(data || null) }; }
+function fail_(message, data) { return { ok: false, message: message || 'error', data: sanitizeForClient_(data || null) }; }
 
 function validate_(payload, rules) {
   payload = payload || {};
