@@ -37,10 +37,10 @@
 ## ค่าเริ่มต้นที่ฝังไว้
 
 Database Spreadsheet ID:
-`1Xs7L1kxtUBDcXiXcYXhStDEaxGV2SdUaZZa9QnbVdpo`
+
 
 Source Form Response Spreadsheet ID:
-`1P8MJ8PPzXg9TkApNl529NOj8UverQ-5hV498Hk0TXpQ`
+
 
 Source Sheet:
 `Form Responses 1`
