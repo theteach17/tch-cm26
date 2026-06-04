@@ -322,9 +322,12 @@ function buildStudentMap_() {
   const byId = {}, byRfid = {};
   students.forEach(s => {
     byId[cleanId_(s.student_id)] = s;
-    if (s.rfid_code) byRfid[cleanId_(s.rfid_code)] = s;
-    if (s.student_pay_code) byRfid[cleanId_(s.student_pay_code)] = s;
-    if (s.backup_card_code) byRfid[cleanId_(s.backup_card_code)] = s;
+    // Card/RFID values may be scanned with leading zeros, while Sheets often
+    // stores them as numbers without leading zeros. Register both exact and
+    // normalized keys for reliable lookup.
+    addCardLookupKey_(byRfid, s.rfid_code, s);
+    addCardLookupKey_(byRfid, s.student_pay_code, s);
+    addCardLookupKey_(byRfid, s.backup_card_code, s);
   });
   return { byId, byRfid };
 }

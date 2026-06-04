@@ -1,4 +1,10 @@
 
+## v2.1.0-scan-leading-zero-normalization
+- Fixed RFID/card scans that contain leading zeros (e.g. `0009832237`) not matching card numbers stored in the Students sheet without leading zeros (e.g. `9832237`).
+- Added backend `normalizeCardCode_()` and card lookup registration for both exact and normalized RFID/student_pay/backup card codes.
+- Added frontend scan normalization so the scan page can show the student immediately before server save.
+- Server now stores the normalized code in AttendanceLog/ScanQueue and keeps the original scan value in note for audit traceability.
+
 ## v2.0.0-attendance-scan-reliability
 - Fixed attendance scan not recording when the active session dropdown was populated but scan bootstrap was not loaded.
 - Scan page now auto-selects the first active session and auto-loads roster/id maps.

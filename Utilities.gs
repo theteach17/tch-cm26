@@ -14,6 +14,28 @@ function safeJson_(obj) { try { return JSON.stringify(obj || {}); } catch (err) 
 function parseJson_(s, fallback) { try { return JSON.parse(s || ''); } catch (err) { return fallback || {}; } }
 function getUserEmail_() { return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || 'unknown'; }
 function cleanId_(v) { return String(v || '').trim().replace(/\.0$/, ''); }
+
+/**
+ * Normalize RFID/card scan values. Many school ID/RFID readers send fixed-width
+ * numeric strings with leading zeros (e.g. 0009832237) while the Students sheet
+ * stores the same card as a number/string without leading zeros (9832237).
+ * Do NOT use this for student_id storage; use it only for card/scan matching.
+ */
+function normalizeCardCode_(v) {
+  let s = cleanId_(v).replace(/[​-‍﻿]/g, '').replace(/\s+/g, '');
+  if (/^\d+$/.test(s)) {
+    s = s.replace(/^0+/, '');
+    if (!s) s = '0';
+  }
+  return s;
+}
+function addCardLookupKey_(map, code, student) {
+  const exact = cleanId_(code);
+  const normalized = normalizeCardCode_(code);
+  if (exact) map[exact] = student;
+  if (normalized) map[normalized] = student;
+}
+
 function cleanString_(v, maxLen) { return String(v === undefined || v === null ? '' : v).trim().slice(0, maxLen || 500); }
 function extractDriveFileId_(url) {
   const s = String(url || '').trim();

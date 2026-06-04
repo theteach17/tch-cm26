@@ -88,6 +88,16 @@ function setScanReadyBox_(type,msg){const box=document.getElementById('scanReady
 function selectedScanSessionId_(){const el=document.getElementById('scanSession');return el?String(el.value||'').trim():'';}
 function scanSessionOptionCount_(){const el=document.getElementById('scanSession');return el?Array.from(el.options).filter(o=>o.value).length:0;}
 
+function normalizeScanCodeClient_(v){
+  let s=String(v||'').trim().replace(/\.0$/,'').replace(/[​-‍﻿]/g,'').replace(/\s+/g,'');
+  if(/^\d+$/.test(s)){
+    s=s.replace(/^0+/,'');
+    if(!s)s='0';
+  }
+  return s;
+}
+
+
 async function loadActiveSessionsUI(options){options=options||{};return runUiAction('loadActiveSessionsUI',async()=>{const r=await call('api_getActiveSessions',{silentLoading:!options.force});state.activeSessions=r.data||[];const opts=state.activeSessions.map(s=>`<option value="${escapeAttr(s.session_id)}">${escapeHtml(s.class_code)} | ${escapeHtml(s.session_date)} | คาบ ${escapeHtml(s.period_no)} | ${escapeHtml(s.lesson_title||'')}</option>`).join('');['scanSession','scoreSession'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const current=el.value;el.innerHTML=opts||'<option value="">ยังไม่มีคาบที่เปิดอยู่</option>';if(current&&Array.from(el.options).some(o=>o.value===current))el.value=current;else if(el.options.length&&el.options[0].value)el.selectedIndex=0;});if(!state.activeSessions.length){setScanReadyBox_('warning','ยังไม่มีคาบที่เปิดอยู่ กรุณาเปิดคาบเรียนก่อนสแกนบัตร');return;}if(options.autoBootstrap!==false){await loadScanBootstrapUI({silent:true});}});}
 
 async function diagnoseScanSessionUI(){return runUiAction('diagnoseScanSessionUI',async()=>{const sid=selectedScanSessionId_();if(!sid){setScanReadyBox_('warning','ยังไม่ได้เลือกคาบสำหรับสแกน');return null;}const r=await call('api_diagnoseScanSession',sid);setScanReadyBox_('info',`<b>ผลตรวจคาบสแกน</b><pre class="mb-0 small">${escapeHtml(JSON.stringify(r.data,null,2))}</pre>`);return r.data;});}
@@ -98,7 +108,7 @@ async function ensureScanReadyUI(){if(state.scan.sessionId&&selectedScanSessionI
 
 async function submitScanInputNowUI(){const input=document.getElementById('scanInput');if(!input)return;const raw=input.value;input.value='';await handleScan(raw,true);}
 
-async function handleScan(raw,flushNow){raw=String(raw||'').trim();if(!raw)return;const ready=await ensureScanReadyUI();if(!ready){prependScanLog('danger','ยังไม่พร้อมสแกน: ระบบยังไม่ได้โหลดรายชื่อของคาบเรียน');return;}const st=state.scan.rfidMap[raw]||state.scan.idMap[raw];let msg='',cls='';if(!st){msg='ไม่พบข้อมูลในรายชื่อคาบนี้: '+raw;cls='danger';}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning';}else{state.scan.present[st.student_id]=true;msg='รับข้อมูลแล้ว: '+st.name+' (กำลังส่ง server)';cls='success';}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;prependScanLog(cls,msg);state.scan.pending.push({raw,received_at:new Date().toISOString(),client_id:'web'});updatePendingScanCount();if(flushNow){await flushScans();return;}if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,300);}
+async function handleScan(raw,flushNow){const rawOriginal=String(raw||'').trim();raw=normalizeScanCodeClient_(rawOriginal);if(!raw)return;const ready=await ensureScanReadyUI();if(!ready){prependScanLog('danger','ยังไม่พร้อมสแกน: ระบบยังไม่ได้โหลดรายชื่อของคาบเรียน');return;}const st=state.scan.rfidMap[raw]||state.scan.rfidMap[rawOriginal]||state.scan.idMap[raw]||state.scan.idMap[rawOriginal];let msg='',cls='';const displayRaw=rawOriginal&&rawOriginal!==raw?`${rawOriginal} → ${raw}`:raw;if(!st){msg='ไม่พบข้อมูลในรายชื่อคาบนี้: '+displayRaw;cls='danger';}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning';}else{state.scan.present[st.student_id]=true;msg='รับข้อมูลแล้ว: '+st.name+(rawOriginal&&rawOriginal!==raw?' · ตัดเลข 0 หน้าแล้ว':'')+' (กำลังส่ง server)';cls='success';}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;prependScanLog(cls,msg);state.scan.pending.push({raw,raw_original:rawOriginal,received_at:new Date().toISOString(),client_id:'web'});updatePendingScanCount();if(flushNow){await flushScans();return;}if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,300);}
 
 function prependScanLog(type,msg){const box=document.getElementById('scanLog');if(!box)return;const el=document.createElement('div');el.className='alert alert-'+(type||'info')+' py-2 mb-2';el.textContent=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' · '+msg;box.prepend(el);while(box.children.length>20)box.lastChild.remove();}
 function updatePendingScanCount(){const p=document.getElementById('pendingScanCount');if(p)p.textContent=state.scan.pending.length;const r=document.getElementById('scanRetryCount');if(r)r.textContent=state.scan.retryCount||0;}

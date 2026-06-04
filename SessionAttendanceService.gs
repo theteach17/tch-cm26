@@ -71,7 +71,13 @@ function getScanBootstrap(sessionId) {
     const sid = cleanId_(r.student_id);
     if (!sid) return;
     idMap[sid] = { student_id: sid, name: s.student_name_th || s.student_name_en || r.student_id, class_code: r.class_code, student_no: r.student_no || '' };
-    [s.rfid_code, s.student_pay_code, s.backup_card_code].forEach(code => { if (code) rfidMap[cleanId_(code)] = idMap[sid]; });
+    [s.rfid_code, s.student_pay_code, s.backup_card_code].forEach(code => {
+      if (!code) return;
+      const exact = cleanId_(code);
+      const normalized = normalizeCardCode_(code);
+      if (exact) rfidMap[exact] = idMap[sid];
+      if (normalized) rfidMap[normalized] = idMap[sid];
+    });
   });
   detail.attendance.forEach(a => present[cleanId_(a.student_id)] = true);
   return ok_({
@@ -142,16 +148,18 @@ function loadScanContext_(sessionId) {
   };
 }
 function processSingleScan_(scan, ctx) {
-  const raw = cleanId_(scan.raw || scan.raw_scan_value || scan);
+  const rawOriginal = cleanId_(scan.raw || scan.raw_scan_value || scan);
+  const raw = normalizeCardCode_(rawOriginal);
   const queueId = uuid_('SCAN');
   const receivedAt = scan.received_at ? new Date(scan.received_at) : now_();
-  let result = { raw, ok:false, message:'ไม่พบข้อมูลบัตร/เลขประจำตัว', student_id:'', name:'' };
+  let result = { raw: raw || rawOriginal, raw_original: rawOriginal, ok:false, message:'ไม่พบข้อมูลบัตร/เลขประจำตัว', student_id:'', name:'' };
   let attendanceRow = null, indexRow = null, scoreRow = null, indexUpdate = null;
 
   if (!raw) {
     result = { raw, ok:false, message:'ค่าว่าง ไม่สามารถเช็กชื่อได้', student_id:'', name:'' };
   } else {
-    const student = ctx.students.byRfid[raw] || ctx.students.byId[raw] || null;
+    // Lookup order: normalized RFID/card code, exact scanned code, normalized/manual student_id, exact student_id.
+    const student = ctx.students.byRfid[raw] || ctx.students.byRfid[rawOriginal] || ctx.students.byId[raw] || ctx.students.byId[rawOriginal] || null;
     if (student) {
       const studentId = cleanId_(student.student_id);
       const name = student.student_name_th || student.student_name_en || '';
@@ -169,7 +177,8 @@ function processSingleScan_(scan, ctx) {
         const attId = uuid_('ATT');
         const isScored = toDateOnly_(ctx.session.session_date) >= ctx.startDate;
         const score = isScored ? ctx.defaultScore : 0;
-        attendanceRow = { attendance_id: attId, term_id: ctx.termId, session_id: ctx.session.session_id, offering_id: ctx.session.offering_id, class_code: ctx.session.class_code, student_id: studentId, rfid_code: raw, checkin_time: now_(), checkin_method: ctx.students.byRfid[raw] ? 'RFID' : 'MANUAL_STUDENT_ID', attendance_status:'PRESENT', score, is_scored:isScored, created_by:getUserEmail_(), created_at:now_(), note:'' };
+        const matchedByCard = !!(ctx.students.byRfid[raw] || ctx.students.byRfid[rawOriginal]);
+        attendanceRow = { attendance_id: attId, term_id: ctx.termId, session_id: ctx.session.session_id, offering_id: ctx.session.offering_id, class_code: ctx.session.class_code, student_id: studentId, rfid_code: raw, checkin_time: now_(), checkin_method: matchedByCard ? 'RFID' : 'MANUAL_STUDENT_ID', attendance_status:'PRESENT', score, is_scored:isScored, created_by:getUserEmail_(), created_at:now_(), note: rawOriginal && rawOriginal !== raw ? ('Original scan: ' + rawOriginal) : '' };
         indexRow = { term_id: ctx.termId, session_id: ctx.session.session_id, student_id: studentId, attendance_id: attId, first_checkin_time: now_(), latest_scan_time: now_(), scan_count: 1, status:'PRESENT' };
         if (isScored && score !== 0) scoreRow = { score_event_id: 'SCORE-' + attId, term_id: ctx.termId, event_date: toDateOnly_(ctx.session.session_date), session_id: ctx.session.session_id, offering_id: ctx.session.offering_id, class_code: ctx.session.class_code, student_id: studentId, event_type:'ATTENDANCE', score_title:'เข้าเรียน', score_delta:score, source_type:'RFID', source_ref:attId, status:'ACTIVE', void_reason:'', created_by:getUserEmail_(), created_at:now_(), updated_at:now_() };
         ctx.idxByStudent[studentId] = Object.assign({}, indexRow);
@@ -178,7 +187,7 @@ function processSingleScan_(scan, ctx) {
       }
     }
   }
-  const queueRow = { queue_id: queueId, term_id: ctx.termId, session_id: ctx.session.session_id, raw_scan_value: raw, received_at: receivedAt, client_id: scan.client_id || '', process_status: result.ok ? 'PROCESSED' : 'ERROR', processed_at: now_(), result_message: result.message, student_id: result.student_id || '', note:'' };
+  const queueRow = { queue_id: queueId, term_id: ctx.termId, session_id: ctx.session.session_id, raw_scan_value: raw, received_at: receivedAt, client_id: scan.client_id || '', process_status: result.ok ? 'PROCESSED' : 'ERROR', processed_at: now_(), result_message: result.message, student_id: result.student_id || '', note: rawOriginal && rawOriginal !== raw ? ('Original scan: ' + rawOriginal) : '' };
   return { result, queueRow, attendanceRow, indexRow, scoreRow, indexUpdate };
 }
 function persistScanResults_(processed, ctx) {
