@@ -186,12 +186,21 @@ function groupStudents(payload) {
     }
   }
 
+  const groupingId = uuid_('GRP');
+  const generatedAt = fmtDate_(now_(), 'yyyy-MM-dd HH:mm:ss');
+  try {
+    persistGroupingLog_(groupingId, poolData, groups, ungrouped, generatedAt, payload.note || 'บันทึกจากเมนูจับกลุ่ม');
+  } catch (err) {
+    console.warn('Grouping log failed: ' + err.message);
+  }
+
   return ok_(Object.assign({}, poolData, {
+    grouping_id: groupingId,
     groups: groups,
     ungrouped: ungrouped,
     group_count: groups.length,
     students_per_group: studentsPerGroup || '',
-    generated_at: fmtDate_(now_(), 'yyyy-MM-dd HH:mm:ss')
+    generated_at: generatedAt
   }), 'จัดกลุ่มสำเร็จ');
 }
 
@@ -277,4 +286,71 @@ function listClassroomToolSessions(payload) {
     return String(b.session_date || '').localeCompare(String(a.session_date || '')) || Number(b.period_no || 0) - Number(a.period_no || 0);
   }).slice(0, limit);
   return ok_({ sessions: rows, offering: offering }, 'โหลดคาบเรียนสำหรับสุ่ม/จับกลุ่มสำเร็จ');
+}
+
+
+/** v2.7: persist grouping results for audit / retrospective review. */
+function persistGroupingLog_(groupingId, poolData, groups, ungrouped, generatedAt, note) {
+  ensureSheet_(SHEETS.GROUPING_LOG, SCHEMA[SHEETS.GROUPING_LOG]);
+  const session = poolData.session || {};
+  const offering = poolData.offering || {};
+  const rows = [];
+  (groups || []).forEach(function (g) {
+    const members = g.members || [];
+    rows.push({
+      grouping_log_id: uuid_('GRLOG'),
+      grouping_id: groupingId,
+      term_id: offering.term_id || getActiveTerm_(),
+      offering_id: offering.offering_id || '',
+      class_code: offering.class_code || '',
+      session_id: session.session_id || '',
+      group_date: generatedAt,
+      group_no: g.group_no,
+      group_count: (groups || []).length,
+      member_count: members.length,
+      member_ids_json: safeJson_(members.map(function (m) { return m.student_id; })),
+      member_names_json: safeJson_(members.map(function (m) { return m.name; })),
+      source_mode: poolData.applied_mode || poolData.requested_mode || 'ALL',
+      created_by: getUserEmail_(),
+      created_at: now_(),
+      note: note || ''
+    });
+  });
+  if ((ungrouped || []).length) {
+    rows.push({
+      grouping_log_id: uuid_('GRLOG'),
+      grouping_id: groupingId,
+      term_id: offering.term_id || getActiveTerm_(),
+      offering_id: offering.offering_id || '',
+      class_code: offering.class_code || '',
+      session_id: session.session_id || '',
+      group_date: generatedAt,
+      group_no: 'UNGROUPED',
+      group_count: (groups || []).length,
+      member_count: ungrouped.length,
+      member_ids_json: safeJson_(ungrouped.map(function (m) { return m.student_id; })),
+      member_names_json: safeJson_(ungrouped.map(function (m) { return m.name; })),
+      source_mode: poolData.applied_mode || poolData.requested_mode || 'ALL',
+      created_by: getUserEmail_(),
+      created_at: now_(),
+      note: 'รายชื่อที่ยังไม่ถูกจัดกลุ่ม'
+    });
+  }
+  if (rows.length) appendObjects_(SHEETS.GROUPING_LOG, rows);
+  audit_('GROUP_STUDENTS', SHEETS.GROUPING_LOG, groupingId, {}, { group_count: (groups || []).length, ungrouped_count: (ungrouped || []).length }, note || 'Grouping result saved');
+  return rows.length;
+}
+
+function listGroupingHistory(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  validate_(payload, { offering_id: { maxLen: 120 }, limit: { type: 'number' } });
+  const limit = Math.max(1, Math.min(Number(payload.limit || 20), 80));
+  let rows = getRows_(SHEETS.GROUPING_LOG);
+  if (payload.offering_id) {
+    assertOfferingAccess_(payload.offering_id);
+    rows = rows.filter(function (r) { return String(r.offering_id) === String(payload.offering_id); });
+  }
+  rows.sort(function (a, b) { return String(b.created_at || b.group_date || '').localeCompare(String(a.created_at || a.group_date || '')); });
+  return ok_({ rows: rows.slice(0, limit) }, 'โหลดประวัติการจับกลุ่มสำเร็จ');
 }

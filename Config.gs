@@ -1,7 +1,7 @@
 /**
  * Classroom Management Ledger System
  * Production-hardened Google Apps Script + Google Sheets Web App
- * Version: 2.6.0-random-group-workflow
+ * Version: 2.7.0-gradebook-attendance-group-log
  *
  * IMPORTANT SECURITY NOTE:
  * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '2.6.0-random-group-workflow',
+  VERSION: '2.7.0-gradebook-attendance-group-log',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',
@@ -75,7 +75,8 @@ const SHEETS = Object.freeze({
   ERROR_LOG: 'ErrorLog',
   AUDIT_LOG: 'AuditLog',
   ARCHIVE_INDEX: 'ArchiveIndex',
-  REVIEW_INDEX: 'ReviewIndex'
+  REVIEW_INDEX: 'ReviewIndex',
+  GROUPING_LOG: 'GroupingLog'
 });
 
 const SCHEMA = Object.freeze({
@@ -104,7 +105,8 @@ const SCHEMA = Object.freeze({
   [SHEETS.ERROR_LOG]: ['error_id','source_row','error_type','error_message','raw_value','status','created_at','resolved_by','resolved_at'],
   [SHEETS.AUDIT_LOG]: ['audit_id','timestamp','user_email','action','target_sheet','target_id','old_value','new_value','note'],
   [SHEETS.ARCHIVE_INDEX]: ['archive_id','term_id','archive_file_id','archive_url','created_by','created_at','status','note'],
-  [SHEETS.REVIEW_INDEX]: ['review_index_id','term_id','offering_id','class_code','topic_id','form_topic_text','submission_id','student_id','student_name','timestamp','review_status','score_status','score','file_count','first_preview_url','first_file_url','file_urls_json','preview_urls_json','updated_at']
+  [SHEETS.REVIEW_INDEX]: ['review_index_id','term_id','offering_id','class_code','topic_id','form_topic_text','submission_id','student_id','student_name','timestamp','review_status','score_status','score','file_count','first_preview_url','first_file_url','file_urls_json','preview_urls_json','updated_at'],
+  [SHEETS.GROUPING_LOG]: ['grouping_log_id','grouping_id','term_id','offering_id','class_code','session_id','group_date','group_no','group_count','member_count','member_ids_json','member_names_json','source_mode','created_by','created_at','note']
 });
 
 const REVIEW_ACTIONS = Object.freeze({

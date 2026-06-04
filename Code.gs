@@ -152,10 +152,13 @@ function api_saveBookCheckBatch(payload) { return guardedCall_(['ADMIN','TEACHER
 function api_saveManualScore(payload) { return guardedCall_(['ADMIN','TEACHER'], saveManualScore, payload || {}); }
 function api_getDashboardData() { return guardedCall_(['ADMIN','TEACHER'], getDashboardData); }
 function api_getGradebook(payload) { return guardedCall_(['ADMIN','TEACHER'], getGradebook, payload || {}); }
+function api_getScorebook(payload) { return guardedCall_(['ADMIN','TEACHER'], getScorebook, payload || {}); }
+function api_getAttendanceDetail(payload) { return guardedCall_(['ADMIN','TEACHER'], getAttendanceDetail, payload || {}); }
 function api_regenerateRoomSheets() { return guardedCall_(['ADMIN','TEACHER'], regenerateActiveRoomSheets); }
 function api_getAttendanceSummary(payload) { return guardedCall_(['ADMIN','TEACHER'], getAttendanceSummary, payload || {}); }
 function api_randomStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], randomStudents, payload || {}); }
 function api_groupStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], groupStudents, payload || {}); }
+function api_listGroupingHistory(payload) { return guardedCall_(['ADMIN','TEACHER'], listGroupingHistory, payload || {}); }
 function api_getRosterPool(payload) { return guardedCall_(['ADMIN','TEACHER'], getRosterPool, payload || {}); }
 function api_listToolSessions(payload) { return guardedCall_(['ADMIN','TEACHER'], listClassroomToolSessions, payload || {}); }
 function api_createTermArchive(termId) { return guardedCall_(['ADMIN'], createTermArchive, termId); }

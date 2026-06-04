@@ -252,3 +252,164 @@ function saveBookCheckBatch(payload) {
   appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
   return ok_({ count: bookRows.length }, 'บันทึกคะแนนสมุดแบบกลุ่มสำเร็จ');
 }
+
+/**
+ * v2.7: Scorebook-only projection for UI.
+ * Keeps attendance details out of the gradebook page so the score table remains focused and readable.
+ */
+function getScorebook(payload) {
+  payload = payload || {};
+  validate_(payload, { offering_id: { required: true, maxLen: 120 }, term_id: { maxLen: 40 } });
+  const termId = payload.term_id || getActiveTerm_();
+  const offeringId = payload.offering_id;
+  const offering = getOffering_(offeringId);
+  if (!offering) throw new Error('ไม่พบห้อง/รายวิชาในระบบ');
+  assertOfferingAccess_(offering.offering_id);
+
+  const enrollments = getCachedEnrollmentsByOffering_(offeringId)
+    .filter(function (r) { return String(r.enrollment_status || 'ACTIVE').toUpperCase() === 'ACTIVE'; });
+  const students = getCachedStudentMap_().byId || {};
+  const scores = getRows_(SHEETS.SCORE_LEDGER).filter(function (r) {
+    return String(r.term_id) === String(termId) && String(r.offering_id) === String(offeringId) && String(r.status).toUpperCase() === 'ACTIVE';
+  });
+  const topics = getRows_(SHEETS.TOPIC_MAP).filter(function (r) {
+    return String(r.term_id) === String(termId) && String(r.offering_id) === String(offeringId) && String(r.status).toUpperCase() === 'ACTIVE';
+  }).sort(function (a, b) {
+    return String(a.assigned_date || '').localeCompare(String(b.assigned_date || '')) || String(a.display_topic_name || a.form_topic_text).localeCompare(String(b.display_topic_name || b.form_topic_text), 'th');
+  });
+  const submissions = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(function (r) {
+    return String(r.term_id) === String(termId) && String(r.offering_id) === String(offeringId);
+  });
+
+  const byStudent = {};
+  enrollments.forEach(function (e) {
+    const sid = cleanId_(e.student_id);
+    const st = students[sid] || {};
+    byStudent[sid] = {
+      student_id: sid,
+      student_no: e.student_no || '',
+      student_name: st.student_name_th || st.student_name_en || sid,
+      book_score: 0,
+      submission_score: 0,
+      manual_score: 0,
+      total_score: 0,
+      submitted_count: 0,
+      missing_count: 0,
+      pending_review_count: 0,
+      voided_count: 0,
+      topic_status: {},
+      topic_scores: {}
+    };
+  });
+
+  scores.forEach(function (s) {
+    const row = byStudent[cleanId_(s.student_id)];
+    if (!row) return;
+    const val = numericOrZero_(s.score_delta);
+    if (s.event_type === 'FORM_SUBMISSION') row.submission_score += val;
+    else if (s.event_type === 'BOOK_CHECK') row.book_score += val;
+    else if (s.event_type !== 'ATTENDANCE') row.manual_score += val;
+    // Keep total score focused on gradebook-related scores. Attendance is reported in the attendance menu.
+    if (s.event_type !== 'ATTENDANCE') row.total_score += val;
+    if (s.event_type === 'FORM_SUBMISSION' && s.source_ref) {
+      // source_ref is submission_id in current scoring flow.
+      const topic = submissions.find(function (sub) { return String(sub.submission_id) === String(s.source_ref); });
+      if (topic && topic.topic_id) row.topic_scores[topic.topic_id] = (row.topic_scores[topic.topic_id] || 0) + val;
+    }
+  });
+
+  const subByStudentTopic = {};
+  submissions.forEach(function (sub) {
+    const sid = cleanId_(sub.student_id);
+    const key = sid + '|' + sub.topic_id;
+    const current = subByStudentTopic[key];
+    if (!current || String(sub.timestamp || '').localeCompare(String(current.timestamp || '')) > 0) subByStudentTopic[key] = sub;
+  });
+
+  Object.keys(byStudent).forEach(function (sid) {
+    topics.forEach(function (t) {
+      const sub = subByStudentTopic[sid + '|' + t.topic_id];
+      let status = 'MISSING';
+      if (sub) {
+        const review = String(sub.review_status || '').toUpperCase();
+        const scoreStatus = String(sub.score_status || '').toUpperCase();
+        if (scoreStatus === 'VOIDED') status = 'VOIDED';
+        else if (review === 'PENDING') status = 'PENDING';
+        else status = 'SUBMITTED';
+      }
+      byStudent[sid].topic_status[t.topic_id] = status;
+      if (status === 'MISSING') byStudent[sid].missing_count++;
+      else byStudent[sid].submitted_count++;
+      if (status === 'PENDING') byStudent[sid].pending_review_count++;
+      if (status === 'VOIDED') byStudent[sid].voided_count++;
+    });
+  });
+
+  return ok_({
+    offering: offering,
+    topics: topics,
+    rows: Object.values(byStudent).sort(function (a, b) {
+      return String(a.student_no || '').localeCompare(String(b.student_no || ''), undefined, { numeric: true }) || String(a.student_id).localeCompare(String(b.student_id), undefined, { numeric: true });
+    })
+  }, 'โหลดสมุดคะแนนสำเร็จ');
+}
+
+/**
+ * v2.7: Attendance detail matrix for the new attendance menu.
+ * Shows each student by session/date/period with summary counts and attendance rate.
+ */
+function getAttendanceDetail(payload) {
+  payload = payload || {};
+  validate_(payload, { offering_id: { required: true, maxLen: 120 }, term_id: { maxLen: 40 } });
+  const termId = payload.term_id || getActiveTerm_();
+  const offering = getOffering_(payload.offering_id);
+  if (!offering) throw new Error('ไม่พบห้อง/รายวิชาในระบบ');
+  assertOfferingAccess_(offering.offering_id);
+
+  const roster = buildRosterStudents_(offering.offering_id);
+  const sessions = getRows_(SHEETS.SESSIONS).filter(function (s) {
+    return String(s.term_id) === String(termId) && String(s.offering_id) === String(offering.offering_id) && String(s.status).toUpperCase() !== 'CANCELLED';
+  }).sort(function (a, b) {
+    return String(a.session_date || '').localeCompare(String(b.session_date || '')) || Number(a.period_no || 0) - Number(b.period_no || 0);
+  });
+  const logs = getRows_(SHEETS.ATTENDANCE_LOG).filter(function (a) {
+    return String(a.term_id) === String(termId) && String(a.offering_id) === String(offering.offering_id);
+  });
+  const logMap = {};
+  logs.forEach(function (a) {
+    const sid = cleanId_(a.student_id);
+    const key = sid + '|' + a.session_id;
+    const st = String(a.attendance_status || '').toUpperCase();
+    const priority = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1 };
+    if (!logMap[key] || (priority[st] || 0) > (priority[logMap[key].attendance_status] || 0)) {
+      logMap[key] = { attendance_status: st, checkin_time: a.checkin_time || a.created_at || '', note: a.note || '' };
+    }
+  });
+
+  const rows = roster.map(function (s) {
+    const r = { student_id: s.student_id, student_no: s.student_no, student_name: s.name, present: 0, absent: 0, late: 0, excused: 0, no_record: 0, rate: 0, cells: {} };
+    sessions.forEach(function (session) {
+      const item = logMap[s.student_id + '|' + session.session_id];
+      const status = item ? String(item.attendance_status || '').toUpperCase() : 'NO_RECORD';
+      if (status === 'PRESENT') r.present++;
+      else if (status === 'LATE') r.late++;
+      else if (status === 'EXCUSED') r.excused++;
+      else if (status === 'ABSENT') r.absent++;
+      else r.no_record++;
+      r.cells[session.session_id] = { status: status, checkin_time: item ? item.checkin_time : '' };
+    });
+    const denom = r.present + r.late + r.absent + r.excused;
+    r.rate = denom ? Math.round(((r.present + r.late + r.excused) / denom) * 1000) / 10 : 0;
+    return r;
+  });
+
+  const summary = rows.reduce(function (acc, r) {
+    acc.present += r.present; acc.absent += r.absent; acc.late += r.late; acc.excused += r.excused; acc.no_record += r.no_record;
+    return acc;
+  }, { present: 0, absent: 0, late: 0, excused: 0, no_record: 0 });
+  summary.student_count = roster.length;
+  summary.session_count = sessions.length;
+  summary.average_rate = rows.length ? Math.round((rows.reduce(function (sum, r) { return sum + Number(r.rate || 0); }, 0) / rows.length) * 10) / 10 : 0;
+
+  return ok_({ offering: offering, sessions: sessions, rows: rows, summary: summary }, 'โหลดตารางเวลาเรียนสำเร็จ');
+}

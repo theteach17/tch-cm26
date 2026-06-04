@@ -30,3 +30,11 @@
 - Changed bootstrap so dashboard counters are non-blocking. Core menus remain usable even if dashboard counters are slow.
 - Added client-side request timeout support to `call()` to prevent the global loading overlay from staying forever.
 - Added loading overlay reference counting and force-safe hide behavior.
+
+## v2.7.0-gradebook-attendance-group-log
+- แยกเมนูตารางเวลาเรียน / มา-ขาด-ลา ออกจากเมนูสมุดคะแนน เพื่อให้เห็นรายละเอียดรายคาบชัดเจนขึ้น
+- ปรับสมุดคะแนนให้เน้นคะแนนและสถานะชิ้นงาน โดยใช้ตารางแนวนอนแบบ sticky columns และสีสถานะ ส่งแล้ว / ขาดส่ง / รอตรวจ / ยกเลิก
+- เพิ่ม API `api_getScorebook()` และ `api_getAttendanceDetail()` เพื่อลดภาระการโหลดข้อมูลที่ไม่จำเป็นในแต่ละหน้า
+- แก้ icon เมนูจับกลุ่มที่แสดงเป็นกล่องสี่เหลี่ยม โดยเปลี่ยนเป็นสัญลักษณ์ข้อความที่รองรับทุกเครื่อง
+- เพิ่มชีท `GroupingLog` สำหรับบันทึกประวัติการจับกลุ่มทุกครั้ง ได้แก่ วันที่, คาบ, จำนวนกลุ่ม, สมาชิกแต่ละกลุ่ม และรายชื่อที่เหลือ
+- ปรับการ์ดแสดงผลกลุ่มให้เป็น card layout อ่านง่าย พร้อมประวัติการจับกลุ่มล่าสุด

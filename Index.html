@@ -31,8 +31,9 @@
     <button class="nav-btn" data-section="review">🖼️ ตรวจงาน</button>
     <button class="nav-btn" data-section="scores">⭐ คะแนนสมุด/พิเศษ</button>
     <button class="nav-btn" data-section="randomName">🎲 สุ่มชื่อ</button>
-    <button class="nav-btn" data-section="grouping">🧩 จับกลุ่ม</button>
+    <button class="nav-btn" data-section="grouping"><span class="nav-symbol">▦</span> จับกลุ่ม</button>
     <button class="nav-btn" data-section="gradebook">📊 สมุดคะแนน</button>
+    <button class="nav-btn" data-section="attendanceReport">🗓️ เวลาเรียน</button>
     <button class="nav-btn" data-section="archive">🗃️ Archive</button>
     <hr class="border-light opacity-25">
     <div class="user-mini" id="userBox">Loading...</div>
@@ -51,6 +52,7 @@
     <?!= include('topicsSync'); ?>
     <?!= include('review'); ?>
     <?!= include('gradebook'); ?>
+    <?!= include('attendanceReport'); ?>
     <?!= include('random'); ?>
     <?!= include('grouping'); ?>
   </main>

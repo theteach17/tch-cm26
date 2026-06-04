@@ -1,29 +1,45 @@
 <section id="scores" class="section">
   <div class="section-title"><div class="section-icon">⭐</div><h3>คะแนนสมุด / คะแนนพิเศษ</h3></div>
-  <div class="card glass-card p-3 p-md-4">
-    <div class="row g-3 align-items-end">
-      <div class="col-lg-4"><label class="form-label">📌 คาบเรียน</label><select id="scoreSession" class="form-select"></select></div>
-      <div class="col-lg-2"><label class="form-label">เลขประจำตัว</label><input id="manualStudentId" class="form-control" placeholder="เช่น 31063"></div>
-      <div class="col-lg-3"><label class="form-label">ชื่อรายการ</label><input id="manualTitle" class="form-control" value="คะแนนพิเศษ"></div>
-      <div class="col-lg-1"><label class="form-label">คะแนน</label><input id="manualDelta" type="number" step="0.1" class="form-control" value="1"></div>
-      <div class="col-lg-2"><button class="btn btn-success w-100" onclick="saveManualScoreUI()">บันทึกคะแนน</button></div>
+  <div class="card p-3 p-md-4 glass-card">
+    <div class="row g-3">
+      <div class="col-md-3"><label class="form-label">คาบ</label><select id="scoreSession" class="form-select"></select></div>
+      <div class="col-md-3"><label class="form-label">เลขประจำตัว</label><input id="manualStudentId" class="form-control"></div>
+      <div class="col-md-3"><label class="form-label">ชื่อรายการ</label><input id="manualTitle" class="form-control" value="คะแนนพิเศษ"></div>
+      <div class="col-md-2"><label class="form-label">คะแนน</label><input id="manualDelta" class="form-control" type="number" value="1"></div>
+      <div class="col-md-12 d-flex flex-wrap gap-2">
+        <button class="btn btn-outline-info" onclick="randomBookUI()">สุ่มตรวจสมุด 5 คน</button>
+        <button class="btn btn-success" onclick="saveManualScoreUI()">บันทึกคะแนนพิเศษ/หักคะแนน</button>
+      </div>
     </div>
-    <div class="professional-note mt-3">ใช้หน้านี้สำหรับบันทึกคะแนนรายบุคคลอย่างรวดเร็ว ส่วนการสุ่มตรวจสมุดให้ใช้เมนู “สุ่มชื่อ” และการจัดกลุ่มให้ใช้เมนู “จับกลุ่ม” เพื่อแสดงผลแบบเหมาะกับการฉายหน้าจอ</div>
+    <div class="professional-note mt-3">ใช้หน้านี้สำหรับบันทึกคะแนนรายบุคคลอย่างรวดเร็ว ส่วนการสุ่มตรวจสมุดแบบฉายหน้าจอให้ใช้เมนู “สุ่มชื่อ”</div>
     <div id="scoreResult" class="mt-3"></div>
   </div>
 </section>
 
 <section id="gradebook" class="section">
-  <div class="section-title"><div class="section-icon">📊</div><h3>สมุดคะแนน</h3></div>
+  <div class="section-title"><div class="section-icon">📊</div><h3>สมุดคะแนนงานและชิ้นงาน</h3></div>
   <div class="card glass-card p-3 mb-3">
     <div class="row g-3 align-items-end">
       <div class="col-lg-5"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="gradeOffering" class="form-select"></select></div>
-      <div class="col-lg-2"><button class="btn btn-primary w-100" onclick="loadGradebookUI()">โหลด</button></div>
+      <div class="col-lg-2"><button class="btn btn-primary w-100" onclick="loadGradebookUI()">โหลดคะแนน</button></div>
       <div class="col-lg-3"><button class="btn btn-outline-success w-100" onclick="regenRoomSheetsUI()">สร้างชีทรายห้อง</button></div>
+      <div class="col-lg-2"><button class="btn btn-outline-secondary w-100" onclick="showSection('attendanceReport')">ดูเวลาเรียน</button></div>
     </div>
   </div>
-  <div id="attendanceSummaryBox" class="row g-3 mb-3"></div>
-  <div class="card p-3 gradebook-card"><div class="table-responsive gradebook-wrap"><table class="table table-hover align-middle gradebook-table" id="gradeTable"></table></div></div>
+  <div id="scorebookSummaryBox" class="row g-3 mb-3"></div>
+  <div id="scorebookLegend" class="scorebook-legend mb-3">
+    <span class="legend-chip submitted">ส่งงานแล้ว</span>
+    <span class="legend-chip missing">ขาดส่ง</span>
+    <span class="legend-chip pending">รอตรวจ</span>
+    <span class="legend-chip voided">ยกเลิก</span>
+  </div>
+  <div class="card p-3 gradebook-card">
+    <div class="scorebook-toolbar">
+      <div><b>ตารางชิ้นงานแนวนอน</b><small> เลื่อนซ้าย-ขวาได้เมื่อมีหลายหัวข้อ</small></div>
+      <input id="scorebookSearch" class="form-control" placeholder="ค้นหาชื่อหรือรหัส" oninput="filterScorebookTable()">
+    </div>
+    <div class="table-responsive gradebook-wrap"><table class="table align-middle scorebook-table" id="gradeTable"></table></div>
+  </div>
 </section>
 
 <section id="archive" class="section">
@@ -35,9 +51,10 @@
 async function randomBookUI(){return runUiAction('randomBookUI',async()=>{const sid=document.getElementById('scoreSession').value;const r=await call('api_randomBookCheck',sid,5);document.getElementById('scoreResult').innerHTML=(r.data||[]).map(x=>`<div class="border rounded p-2 mb-2">${escapeHtml(x.student_id)} <button class="btn btn-sm btn-success" onclick="saveBook('${escapeAttr(sid)}','${escapeAttr(x.student_id)}','BROUGHT')">นำสมุดมา</button> <button class="btn btn-sm btn-danger" onclick="saveBook('${escapeAttr(sid)}','${escapeAttr(x.student_id)}','NOT_BROUGHT')">ไม่ได้นำมา</button></div>`).join('')||'<div class="alert alert-info">ไม่พบรายชื่อสำหรับสุ่ม</div>';});}
 async function saveBook(sid,studentId,result){return runUiAction('saveBook',async()=>{await call('api_saveBookCheckResult',{session_id:sid,student_id:studentId,result});toast('บันทึกผลตรวจสมุดเรียบร้อย','success');});}
 async function saveManualScoreUI(){return runUiAction('saveManualScoreUI',async()=>{await call('api_saveManualScore',{session_id:document.getElementById('scoreSession').value,student_id:document.getElementById('manualStudentId').value,score_title:document.getElementById('manualTitle').value,score_delta:document.getElementById('manualDelta').value});toast('บันทึกคะแนนเรียบร้อย','success');});}
-function attendanceSummaryCards_(d){const s=(d&&d.summary)||{};return `<div class="col-md-3"><div class="summary-card"><span>คาบเรียนทั้งหมด</span><b>${escapeHtml(s.session_count||0)}</b></div></div><div class="col-md-3"><div class="summary-card green"><span>มาเรียน</span><b>${escapeHtml(s.present_total||0)}</b></div></div><div class="col-md-3"><div class="summary-card red"><span>ขาดเรียน</span><b>${escapeHtml(s.absent_total||0)}</b></div></div><div class="col-md-3"><div class="summary-card amber"><span>ลา/สาย</span><b>${Number(s.excused_total||0)+Number(s.late_total||0)}</b></div></div>`;}
-function gradeStatusBadge_(v){v=String(v||'-');if(v==='✓')return '<span class="status-chip ok">ส่งแล้ว</span>';if(v==='รอตรวจ')return '<span class="status-chip pending">รอตรวจ</span>';if(v==='ยกเลิก')return '<span class="status-chip bad">ยกเลิก</span>';return '<span class="status-chip none">-</span>';}
-async function loadGradebookUI(){return runUiAction('loadGradebookUI',async()=>{const r=await call('api_getGradebook',{offering_id:document.getElementById('gradeOffering').value});const topics=r.data.topics||[];const rows=r.data.rows||[];document.getElementById('attendanceSummaryBox').innerHTML=attendanceSummaryCards_(r.data.attendanceSummary);const fixedHeaders=['เลขที่','รหัส','ชื่อ','มา','ขาด','ลา','สาย','% เข้าเรียน','เข้าเรียน','สมุด','งาน','พิเศษ','รวม','ส่งแล้ว','ขาดส่ง','รอตรวจ','ยกเลิก'];let html='<thead><tr>'+fixedHeaders.map(h=>`<th>${escapeHtml(h)}</th>`).join('')+topics.map(t=>`<th class="topic-col">${escapeHtml(t.display_topic_name||t.form_topic_text)}</th>`).join('')+'</tr></thead><tbody>';html+=rows.map(row=>'<tr>'+[row.student_no,row.student_id,row.student_name,row.present_count||0,row.absent_count||0,row.excused_count||0,row.late_count||0,(row.attendance_rate||0)+'%',row.attendance_score,row.book_score,row.submission_score,row.manual_score,row.total_score,row.submitted_count,row.missing_count,row.pending_review_count,row.voided_count].map((c,i)=>`<td class="${i===2?'name-cell':''}">${escapeHtml(c)}</td>`).join('')+topics.map(t=>`<td>${gradeStatusBadge_(row.topic_status[t.topic_id]||'-')}</td>`).join('')+'</tr>').join('')+'</tbody>';document.getElementById('gradeTable').innerHTML=html;});}
+function scorebookSummaryCards_(rows,topics){rows=rows||[];topics=topics||[];const submitted=rows.reduce((s,r)=>s+Number(r.submitted_count||0),0);const missing=rows.reduce((s,r)=>s+Number(r.missing_count||0),0);const pending=rows.reduce((s,r)=>s+Number(r.pending_review_count||0),0);const avg=rows.length?Math.round(rows.reduce((s,r)=>s+Number(r.total_score||0),0)/rows.length*10)/10:0;return `<div class="col-md-3"><div class="summary-card"><span>หัวข้องาน</span><b>${topics.length}</b></div></div><div class="col-md-3"><div class="summary-card green"><span>ส่งแล้ว</span><b>${submitted}</b></div></div><div class="col-md-3"><div class="summary-card red"><span>ขาดส่ง</span><b>${missing}</b></div></div><div class="col-md-3"><div class="summary-card"><span>คะแนนเฉลี่ย</span><b>${avg}</b></div></div>`;}
+function gradeStatusBadge_(v){v=String(v||'MISSING').toUpperCase();if(v==='SUBMITTED')return '<span class="work-cell submitted">ส่งแล้ว</span>';if(v==='PENDING')return '<span class="work-cell pending">รอตรวจ</span>';if(v==='VOIDED')return '<span class="work-cell voided">ยกเลิก</span>';return '<span class="work-cell missing">ขาดส่ง</span>';}
+async function loadGradebookUI(){return runUiAction('loadGradebookUI',async()=>{const offeringId=document.getElementById('gradeOffering').value;if(!offeringId){toast('กรุณาเลือกห้อง/รายวิชา','warning');return;}const r=await call('api_getScorebook',{offering_id:offeringId},{timeoutMs:45000});const topics=r.data.topics||[];const rows=r.data.rows||[];document.getElementById('scorebookSummaryBox').innerHTML=scorebookSummaryCards_(rows,topics);let html='<thead><tr><th class="pin c1">เลขที่</th><th class="pin c2">รหัส</th><th class="pin c3 name-head">ชื่อ</th><th>สมุด</th><th>งาน</th><th>พิเศษ</th><th>รวม</th><th>ส่งแล้ว</th><th>ขาดส่ง</th><th>รอตรวจ</th><th>ยกเลิก</th>'+topics.map(t=>`<th class="topic-col" title="${escapeAttr(t.form_topic_text)}"><div>${escapeHtml(t.display_topic_name||t.form_topic_text)}</div><small>${escapeHtml(t.assigned_date||'')}</small></th>`).join('')+'</tr></thead><tbody>';html+=rows.map(row=>`<tr data-search="${escapeAttr((row.student_id+' '+row.student_name).toLowerCase())}"><td class="pin c1">${escapeHtml(row.student_no)}</td><td class="pin c2">${escapeHtml(row.student_id)}</td><td class="pin c3 name-cell">${escapeHtml(row.student_name)}</td>${[row.book_score,row.submission_score,row.manual_score,row.total_score,row.submitted_count,row.missing_count,row.pending_review_count,row.voided_count].map(c=>`<td>${escapeHtml(c||0)}</td>`).join('')}${topics.map(t=>`<td>${gradeStatusBadge_(row.topic_status[t.topic_id])}</td>`).join('')}</tr>`).join('')+'</tbody>';document.getElementById('gradeTable').innerHTML=html;});}
+function filterScorebookTable(){const q=String(document.getElementById('scorebookSearch').value||'').toLowerCase().trim();document.querySelectorAll('#gradeTable tbody tr').forEach(tr=>{tr.style.display=!q||String(tr.dataset.search||'').includes(q)?'':'none';});}
 async function regenRoomSheetsUI(){return runUiAction('regenRoomSheetsUI',async()=>{await call('api_regenerateRoomSheets');toast('สร้างชีทรายห้องเรียบร้อย','success');});}
 async function archiveTermUI(){return runUiAction('archiveTermUI',async()=>{const ok=await confirmAction('ยืนยันสร้าง Archive','ระบบจะสร้างไฟล์ Archive ภาคเรียนปัจจุบันและปรับสถานะภาคเรียน ยืนยันหรือไม่');if(!ok)return;const r=await call('api_createTermArchive','');document.getElementById('archiveResult').textContent=pretty(r.data);toast('สร้าง Archive เรียบร้อย','success');});}
 </script>

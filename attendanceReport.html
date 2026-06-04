@@ -1,0 +1,27 @@
+<section id="attendanceReport" class="section">
+  <div class="section-title"><div class="section-icon">🗓️</div><h3>ตารางเวลาเรียน / มา-ขาด-ลา</h3></div>
+  <div class="card glass-card p-3 mb-3">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-5"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="attendanceOffering" class="form-select"></select></div>
+      <div class="col-lg-2"><button class="btn btn-primary w-100" onclick="loadAttendanceReportUI()">โหลดเวลาเรียน</button></div>
+      <div class="col-lg-5"><div class="professional-note mb-0">แยกจากสมุดคะแนนเพื่อแสดงรายละเอียดการมาเรียน ขาด ลา สาย ในแต่ละคาบได้ชัดเจน</div></div>
+    </div>
+  </div>
+  <div id="attendanceReportSummary" class="row g-3 mb-3"></div>
+  <div class="card p-3 attendance-report-card">
+    <div class="scorebook-toolbar">
+      <div><b>รายละเอียดรายคาบ</b><small> แสดงสถานะของนักเรียนแต่ละคนในแต่ละวัน/คาบ</small></div>
+      <input id="attendanceSearch" class="form-control" placeholder="ค้นหาชื่อหรือรหัส" oninput="filterAttendanceTable()">
+    </div>
+    <div class="attendance-legend mb-2">
+      <span class="att-chip PRESENT">มา</span><span class="att-chip LATE">สาย</span><span class="att-chip EXCUSED">ลา</span><span class="att-chip ABSENT">ขาด</span><span class="att-chip NO_RECORD">ยังไม่บันทึก</span>
+    </div>
+    <div class="table-responsive attendance-wrap"><table class="table align-middle attendance-detail-table" id="attendanceDetailTable"></table></div>
+  </div>
+</section>
+<script>
+function attendanceSummaryCards2_(s){s=s||{};return `<div class="col-md-2"><div class="summary-card"><span>นักเรียน</span><b>${s.student_count||0}</b></div></div><div class="col-md-2"><div class="summary-card"><span>คาบ</span><b>${s.session_count||0}</b></div></div><div class="col-md-2"><div class="summary-card green"><span>มา</span><b>${s.present||0}</b></div></div><div class="col-md-2"><div class="summary-card amber"><span>สาย</span><b>${s.late||0}</b></div></div><div class="col-md-2"><div class="summary-card red"><span>ขาด</span><b>${s.absent||0}</b></div></div><div class="col-md-2"><div class="summary-card"><span>เฉลี่ยเข้าเรียน</span><b>${s.average_rate||0}%</b></div></div>`;}
+function attBadge_(cell){const st=String((cell&&cell.status)||'NO_RECORD').toUpperCase();const map={PRESENT:'มา',LATE:'สาย',EXCUSED:'ลา',ABSENT:'ขาด',NO_RECORD:'-'};return `<span class="att-chip ${st}" title="${escapeAttr(cell&&cell.checkin_time||'')}">${map[st]||st}</span>`;}
+async function loadAttendanceReportUI(){return runUiAction('loadAttendanceReportUI',async()=>{const offeringId=document.getElementById('attendanceOffering').value;if(!offeringId){toast('กรุณาเลือกห้อง/รายวิชา','warning');return;}const r=await call('api_getAttendanceDetail',{offering_id:offeringId},{timeoutMs:45000});const sessions=r.data.sessions||[];const rows=r.data.rows||[];document.getElementById('attendanceReportSummary').innerHTML=attendanceSummaryCards2_(r.data.summary||{});let html='<thead><tr><th class="pin c1">เลขที่</th><th class="pin c2">รหัส</th><th class="pin c3 name-head">ชื่อ</th><th>มา</th><th>สาย</th><th>ลา</th><th>ขาด</th><th>%</th>'+sessions.map(s=>`<th class="session-col"><div>${escapeHtml(formatThaiDateDisplay(s.session_date)||s.session_date)}</div><small>คาบ ${escapeHtml(s.period_no||'-')} · ${escapeHtml(s.lesson_title||'')}</small></th>`).join('')+'</tr></thead><tbody>';html+=rows.map(row=>`<tr data-search="${escapeAttr((row.student_id+' '+row.student_name).toLowerCase())}"><td class="pin c1">${escapeHtml(row.student_no)}</td><td class="pin c2">${escapeHtml(row.student_id)}</td><td class="pin c3 name-cell">${escapeHtml(row.student_name)}</td><td>${row.present||0}</td><td>${row.late||0}</td><td>${row.excused||0}</td><td>${row.absent||0}</td><td><b>${row.rate||0}%</b></td>${sessions.map(s=>`<td>${attBadge_(row.cells&&row.cells[s.session_id])}</td>`).join('')}</tr>`).join('')+'</tbody>';document.getElementById('attendanceDetailTable').innerHTML=html;});}
+function filterAttendanceTable(){const q=String(document.getElementById('attendanceSearch').value||'').toLowerCase().trim();document.querySelectorAll('#attendanceDetailTable tbody tr').forEach(tr=>{tr.style.display=!q||String(tr.dataset.search||'').includes(q)?'':'none';});}
+</script>
