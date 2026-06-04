@@ -1,7 +1,7 @@
 /**
  * Classroom Management Ledger System
  * Production-hardened Google Apps Script + Google Sheets Web App
- * Version: 2.8.0-dashboard-icons-stability
+ * Version: 2.8.1-emoji-menu-restore
  *
  * IMPORTANT SECURITY NOTE:
  * Do not hardcode real Spreadsheet IDs in this repository. Configure them from
@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '2.8.0-dashboard-icons-stability',
+  VERSION: '2.8.1-emoji-menu-restore',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',

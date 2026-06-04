@@ -39,6 +39,12 @@
 - เพิ่มชีท `GroupingLog` สำหรับบันทึกประวัติการจับกลุ่มทุกครั้ง ได้แก่ วันที่, คาบ, จำนวนกลุ่ม, สมาชิกแต่ละกลุ่ม และรายชื่อที่เหลือ
 - ปรับการ์ดแสดงผลกลุ่มให้เป็น card layout อ่านง่าย พร้อมประวัติการจับกลุ่มล่าสุด
 
+
+## 2.8.1-emoji-menu-restore
+- คืน emoji เมนูและหัวข้อหน้าจอกลับเป็นรูปแบบเดิมตาม UX ที่ผู้ใช้ต้องการ
+- เปลี่ยนเฉพาะเมนูจับกลุ่มจากสัญลักษณ์ที่บางเครื่องแสดงเป็นกล่อง เป็น emoji 👥 ที่รองรับบน Windows/Chrome ได้ดีกว่า
+- คงการปรับปรุง Dashboard performance จาก v2.8.0 ไว้ทั้งหมด
+
 ## 2.8.0-dashboard-icons-stability
 - Reworked Dashboard API to lightweight metadata counters so pressing "โหลดภาพรวม" does not scan large submission/attendance tables.
 - Dashboard now returns fast summary counts and active session list without blocking the Web App.
