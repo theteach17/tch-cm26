@@ -53,3 +53,7 @@ Dashboard counters are no longer loaded automatically on startup. Use the “โ
 - เมนู `สมุดคะแนน` ใช้สำหรับคะแนนและชิ้นงานเท่านั้น
 - เมนูใหม่ `เวลาเรียน` ใช้ตรวจรายละเอียด มา / ขาด / ลา / สาย รายคาบ
 - เมนู `จับกลุ่ม` จะบันทึกผลลงชีท `GroupingLog` อัตโนมัติทุกครั้งที่กดจัดกลุ่ม
+
+### v2.8 Notes
+- Dashboard now uses a lightweight backend path. If the previous version took more than 1 minute to load dashboard counters, replace `ScoringReportService.gs`, `dashboard.html`, `Index.html`, `styles.html`, and `utils.html` from this package.
+- Menu icons were changed from emoji/special symbols to text badges such as `DB`, `GP`, `AT` to prevent square-box glyphs on Windows/Chrome classroom machines.

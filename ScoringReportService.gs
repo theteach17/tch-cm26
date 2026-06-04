@@ -52,94 +52,105 @@ function saveManualScore(payload) {
  * It reads only the columns needed by the dashboard, instead of getRows_() on entire sheets.
  * This prevents the home page from becoming a bottleneck when submissions/attendance grow.
  */
-function getProjectedRowsForDashboard_(sheetName, fields) {
-  const sh = sh_(sheetName);
-  const lastRow = sh.getLastRow();
-  if (lastRow < 2) return [];
-  const header = headerMap_(sheetName);
-  const n = lastRow - 1;
-  const cols = {};
-  fields.forEach(function (f) {
-    const idx = header.map[f];
-    if (idx === undefined) {
-      cols[f] = Array(n).fill('');
-    } else {
-      cols[f] = sh.getRange(2, idx + 1, n, 1).getValues().map(function (r) { return r[0]; });
-    }
-  });
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const obj = { __row: i + 2 };
-    fields.forEach(function (f) { obj[f] = cols[f][i]; });
-    out.push(obj);
+/**
+ * v2.8: Dashboard counters must never block the application startup.
+ * This version reads only lightweight metadata and a small active-session set.
+ */
+function countSheetDataRowsFast_(sheetName) {
+  try {
+    const sh = sh_(sheetName);
+    return Math.max(0, sh.getLastRow() - 1);
+  } catch (err) {
+    console.warn('countSheetDataRowsFast_ failed for ' + sheetName + ': ' + err.message);
+    return 0;
   }
-  return out;
+}
+
+function readActiveSessionsFast_(termId, allowedOfferings) {
+  try {
+    const sh = sh_(SHEETS.SESSIONS);
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return { total: 0, active: [] };
+    const header = headerMap_(SHEETS.SESSIONS);
+    const headers = header.headers;
+    const values = sh.getRange(2, 1, lastRow - 1, headers.length).getValues();
+    let total = 0;
+    const active = [];
+    values.forEach(function (row) {
+      const r = {};
+      headers.forEach(function (h, i) { r[h] = row[i]; });
+      if (String(r.term_id) !== String(termId)) return;
+      total++;
+      if (String(r.status) === 'ACTIVE' && allowedOfferings.has(String(r.offering_id))) {
+        active.push({
+          session_id: r.session_id,
+          offering_id: r.offering_id,
+          class_code: r.class_code,
+          session_date: toDateOnly_(r.session_date),
+          period_no: r.period_no,
+          lesson_title: r.lesson_title || ''
+        });
+      }
+    });
+    return { total: total, active: active.slice(0, 12) };
+  } catch (err) {
+    console.warn('readActiveSessionsFast_ failed: ' + err.message);
+    return { total: 0, active: [] };
+  }
+}
+
+function countTodayAttendanceFast_(termId) {
+  try {
+    const sh = sh_(SHEETS.ATTENDANCE_LOG);
+    const lastRow = sh.getLastRow();
+    if (lastRow < 2) return 0;
+    const header = headerMap_(SHEETS.ATTENDANCE_LOG);
+    const n = Math.min(lastRow - 1, 800);
+    const startRow = Math.max(2, lastRow - n + 1);
+    const headers = header.headers;
+    const values = sh.getRange(startRow, 1, n, headers.length).getValues();
+    const today = toDateOnly_(now_());
+    let count = 0;
+    values.forEach(function (row) {
+      const term = row[header.map.term_id];
+      const status = row[header.map.attendance_status];
+      const d = row[header.map.checkin_time] || row[header.map.created_at];
+      if (String(term) === String(termId) && String(status) === 'PRESENT' && toDateOnly_(d) === today) count++;
+    });
+    return count;
+  } catch (err) {
+    console.warn('countTodayAttendanceFast_ skipped: ' + err.message);
+    return 0;
+  }
 }
 
 function getDashboardData() {
+  const started = Date.now();
   const termId = getActiveTerm_();
   const user = getCurrentUser();
   const cache = CacheService.getScriptCache();
-  const cacheKey = 'DASH_V25_' + termId + '_' + String(user.email || '').toLowerCase();
+  const cacheKey = 'DASH_V28_' + termId + '_' + String(user.email || '').toLowerCase();
   const cached = cache.get(cacheKey);
-  if (cached) {
-    return ok_(JSON.parse(cached), 'Dashboard loaded from cache');
-  }
+  if (cached) return ok_(JSON.parse(cached), 'Dashboard loaded from cache');
 
-  const started = Date.now();
   const offerings = listUiOfferings_ ? listUiOfferings_() : listActiveOfferings();
   const allowedOfferings = new Set(offerings.map(function (o) { return String(o.offering_id); }));
-
-  // Sessions are small, but still read only the required columns.
-  const sessions = getProjectedRowsForDashboard_(SHEETS.SESSIONS, [
-    'term_id','status','offering_id','session_id','class_code','session_date','period_no','lesson_title'
-  ]).filter(function (r) { return String(r.term_id) === String(termId); });
-  const activeSessions = sessions.filter(function (r) {
-    return String(r.status) === 'ACTIVE' && allowedOfferings.has(String(r.offering_id));
-  });
-
-  let submissions = 0, pending = 0, voided = 0;
-  try {
-    getProjectedRowsForDashboard_(SHEETS.NORMALIZED_SUBMISSIONS, [
-      'term_id','review_status','score_status'
-    ]).forEach(function (r) {
-      if (String(r.term_id) !== String(termId)) return;
-      submissions++;
-      if (String(r.review_status) === 'PENDING') pending++;
-      if (String(r.score_status) === 'VOIDED') voided++;
-    });
-  } catch (err) {
-    // Dashboard must never block the Web App startup. Return a warning instead.
-    console.warn('Dashboard submission counters skipped: ' + err.message);
-  }
-
-  let attendanceToday = 0;
-  const today = toDateOnly_(now_());
-  try {
-    getProjectedRowsForDashboard_(SHEETS.ATTENDANCE_LOG, [
-      'term_id','created_at','checkin_time','attendance_status'
-    ]).forEach(function (r) {
-      if (String(r.term_id) !== String(termId)) return;
-      const d = toDateOnly_(r.created_at || r.checkin_time || now_());
-      if (d === today && String(r.attendance_status) === 'PRESENT') attendanceToday++;
-    });
-  } catch (err) {
-    console.warn('Dashboard attendance counter skipped: ' + err.message);
-  }
+  const sessionInfo = readActiveSessionsFast_(termId, allowedOfferings);
 
   const data = {
-    termId,
-    activeSessions,
-    totalSessions: sessions.length,
-    submissions,
-    pendingReview: pending,
-    voided,
-    attendanceToday,
-    offerings,
+    termId: termId,
+    activeSessions: sessionInfo.active,
+    totalSessions: sessionInfo.total,
+    submissions: countSheetDataRowsFast_(SHEETS.NORMALIZED_SUBMISSIONS),
+    pendingReview: countSheetDataRowsFast_(SHEETS.REVIEW_INDEX),
+    voided: 0,
+    attendanceToday: countTodayAttendanceFast_(termId),
+    offerings: offerings,
     generatedAt: now_(),
+    mode: 'lightweight',
     elapsedMs: Date.now() - started
   };
-  try { cache.put(cacheKey, JSON.stringify(sanitizeForClient_(data)), 45); } catch (err) {}
+  try { cache.put(cacheKey, JSON.stringify(sanitizeForClient_(data)), 60); } catch (err) {}
   return ok_(data, 'Dashboard loaded');
 }
 function getGradebook(payload) {

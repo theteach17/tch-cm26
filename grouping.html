@@ -1,11 +1,11 @@
 <section id="grouping" class="section">
-  <div class="section-title"><div class="section-icon text-icon">▦</div><h3>จับกลุ่มนักเรียน</h3></div>
+  <div class="section-title"><div class="section-icon text-icon">GP</div><h3>จับกลุ่มนักเรียน</h3></div>
   <div class="card glass-card p-3 p-md-4 mb-3 grouping-control-card">
     <div class="row g-3 align-items-end">
       <div class="col-lg-3"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="groupOffering" class="form-select" onchange="loadGroupSessionsUI();loadGroupingHistoryUI();"></select></div>
       <div class="col-lg-3"><label class="form-label">📌 คาบเรียน</label><select id="groupSession" class="form-select"><option value="">ไม่เลือกคาบ</option></select></div>
-      <div class="col-lg-3"><label class="form-label">👥 แหล่งรายชื่อ</label><select id="groupPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
-      <div class="col-lg-3"><button class="btn btn-success w-100 big-action-btn" onclick="groupStudentsUI()"><span class="btn-symbol">▦</span> จัดกลุ่ม</button></div>
+      <div class="col-lg-3"><label class="form-label">แหล่งรายชื่อ</label><select id="groupPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
+      <div class="col-lg-3"><button class="btn btn-success w-100 big-action-btn" onclick="groupStudentsUI()"><span class="btn-symbol">GP</span> จัดกลุ่ม</button></div>
     </div>
     <div class="row g-3 align-items-end mt-1">
       <div class="col-lg-3"><label class="form-label">จำนวนนักเรียนต่อกลุ่ม</label><input id="studentsPerGroup" type="number" min="1" class="form-control" value="4"></div>

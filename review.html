@@ -1,5 +1,5 @@
 <section id="review" class="section">
-  <div class="section-title"><div class="section-icon">🖼️</div><h3>ตรวจงานจากรูปภาพ</h3></div>
+  <div class="section-title"><div class="section-icon text-icon">RV</div><h3>ตรวจงานจากรูปภาพ</h3></div>
 
   <div class="card glass-card p-3 mb-3 review-toolbar">
     <div class="row g-3 align-items-end">
@@ -8,7 +8,7 @@
         <select id="reviewClass" class="form-select" onchange="onReviewClassChangeUI()"></select>
       </div>
       <div class="col-lg-4 col-md-6">
-        <label class="form-label">📝 หัวข้องานที่จะตรวจ</label>
+        <label class="form-label">หัวข้องานที่จะตรวจ</label>
         <select id="reviewTopic" class="form-select" onchange="onReviewTopicChangeUI()">
           <option value="">— เลือกหัวข้อก่อนโหลดงาน —</option>
         </select>
@@ -78,7 +78,7 @@ viewer.innerHTML=`
             <button class="btn btn-outline-primary btn-sm" onclick="openCurrentReviewImage()">เปิดรูปต้นฉบับ</button>
           </div>
         </div>
-        <div class="review-file-thumbs mt-2">${files.map((f,i)=>`<button type="button" class="review-file-button ${i===(state.review.currentFileIndex||0)?'active':''}" onclick="setReviewFile(${i})">🖼️ รูปที่ ${i+1}</button>`).join('')||'<span class="small-muted">ไม่มีไฟล์แนบ</span>'}</div>
+        <div class="review-file-thumbs mt-2">${files.map((f,i)=>`<button type="button" class="review-file-button ${i===(state.review.currentFileIndex||0)?'active':''}" onclick="setReviewFile(${i})">รูปที่ ${i+1}</button>`).join('')||'<span class="small-muted">ไม่มีไฟล์แนบ</span>'}</div>
       </div>
       <div class="col-xl-4">
         <div class="review-side-panel p-3">
@@ -100,12 +100,12 @@ viewer.innerHTML=`
             <span class="badge text-bg-light">${files.length} รูป</span>
           </div>
           <div class="review-action-grid">
-            <button class="btn btn-success" onclick="reviewCurrent('APPROVE')">✅ ผ่าน</button>
+            <button class="btn btn-success" onclick="reviewCurrent('APPROVE')">ผ่าน</button>
             <button class="btn btn-danger" onclick="reviewCurrent('VOID_NO_STAMP','ไม่มีตราปั๊ม')">🚫 ไม่มีตรา</button>
-            <button class="btn btn-warning" onclick="reviewCurrent('VOID_WRONG_TOPIC','ส่งผิดหัวข้อ')">⚠️ ผิดหัวข้อ</button>
+            <button class="btn btn-warning" onclick="reviewCurrent('VOID_WRONG_TOPIC','ส่งผิดหัวข้อ')">ผิดหัวข้อ</button>
             <button class="btn btn-outline-danger" onclick="reviewCurrent('VOID_UNCLEAR_IMAGE','รูปไม่ชัด')">🔎 รูปไม่ชัด</button>
             <button class="btn btn-outline-secondary" onclick="reviewCurrent('VOID_DUPLICATE','ส่งซ้ำ')">📌 ส่งซ้ำ</button>
-            <button class="btn btn-outline-success" onclick="reviewCurrent('RESTORE_SCORE','')">↩️ คืนคะแนน</button>
+            <button class="btn btn-outline-success" onclick="reviewCurrent('RESTORE_SCORE','')">คืนคะแนน</button>
           </div>
           <div class="alert alert-light border mt-3 mb-0 small">เมื่อกดบันทึกผลตรวจ ระบบจะบันทึกสถานะและเลื่อนไปรายการถัดไปอัตโนมัติ</div>
         </div>

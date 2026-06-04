@@ -38,3 +38,10 @@
 - แก้ icon เมนูจับกลุ่มที่แสดงเป็นกล่องสี่เหลี่ยม โดยเปลี่ยนเป็นสัญลักษณ์ข้อความที่รองรับทุกเครื่อง
 - เพิ่มชีท `GroupingLog` สำหรับบันทึกประวัติการจับกลุ่มทุกครั้ง ได้แก่ วันที่, คาบ, จำนวนกลุ่ม, สมาชิกแต่ละกลุ่ม และรายชื่อที่เหลือ
 - ปรับการ์ดแสดงผลกลุ่มให้เป็น card layout อ่านง่าย พร้อมประวัติการจับกลุ่มล่าสุด
+
+## 2.8.0-dashboard-icons-stability
+- Reworked Dashboard API to lightweight metadata counters so pressing "โหลดภาพรวม" does not scan large submission/attendance tables.
+- Dashboard now returns fast summary counts and active session list without blocking the Web App.
+- Replaced menu emoji/symbol icons with text-based icon badges to avoid square-box rendering on classroom browsers.
+- Updated section icons and key action buttons to use stable text labels where emoji rendering may be unreliable.
+- Fixed duplicate `const offering` declaration in scorebook service package source.

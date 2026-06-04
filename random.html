@@ -1,10 +1,10 @@
 <section id="randomName" class="section">
-  <div class="section-title"><div class="section-icon">🎲</div><h3>สุ่มชื่อนักเรียน</h3></div>
+  <div class="section-title"><div class="section-icon text-icon">RD</div><h3>สุ่มชื่อนักเรียน</h3></div>
   <div class="card glass-card p-3 p-md-4 mb-3 random-control-card">
     <div class="row g-3 align-items-end">
       <div class="col-xl-3 col-lg-4"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="randomOffering" class="form-select" onchange="loadRandomSessionsUI()"></select></div>
       <div class="col-xl-3 col-lg-4"><label class="form-label">📌 คาบเรียน</label><select id="randomSession" class="form-select"><option value="">ไม่เลือกคาบ</option></select></div>
-      <div class="col-xl-3 col-lg-4"><label class="form-label">👥 แหล่งรายชื่อ</label><select id="randomPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
+      <div class="col-xl-3 col-lg-4"><label class="form-label">แหล่งรายชื่อ</label><select id="randomPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
       <div class="col-xl-1 col-md-4"><label class="form-label">จำนวน</label><input id="randomCount" type="number" min="1" max="50" class="form-control" value="1"></div>
       <div class="col-xl-2 col-md-8"><button class="btn btn-primary w-100 big-action-btn" onclick="randomStudentsUI()">✨ เริ่มสุ่ม</button></div>
     </div>
@@ -30,8 +30,8 @@
           <div class="row g-2 align-items-end">
             <div class="col-6"><label class="form-label small">คะแนนนำสมุดมา</label><input id="randomBookScoreGood" class="form-control" type="number" step="0.1" value="1"></div>
             <div class="col-6"><label class="form-label small">คะแนนไม่ได้นำมา</label><input id="randomBookScoreBad" class="form-control" type="number" step="0.1" value="-1"></div>
-            <div class="col-6"><button class="btn btn-success w-100" onclick="saveRandomBookBatchUI('BROUGHT')">✅ ทั้งหมดนำมา</button></div>
-            <div class="col-6"><button class="btn btn-danger w-100" onclick="saveRandomBookBatchUI('NOT_BROUGHT')">❌ ทั้งหมดไม่ได้นำมา</button></div>
+            <div class="col-6"><button class="btn btn-success w-100" onclick="saveRandomBookBatchUI('BROUGHT')">ทั้งหมดนำมา</button></div>
+            <div class="col-6"><button class="btn btn-danger w-100" onclick="saveRandomBookBatchUI('NOT_BROUGHT')">ทั้งหมดไม่ได้นำมา</button></div>
           </div>
           <div class="small-muted mt-2">การบันทึกคะแนนสมุดต้องเลือกคาบเรียนก่อน เพื่อให้คะแนนเชื่อมกับคาบใน ScoreLedger ได้ถูกต้อง</div>
         </div>
