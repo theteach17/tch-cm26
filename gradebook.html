@@ -8,45 +8,8 @@
       <div class="col-lg-1"><label class="form-label">คะแนน</label><input id="manualDelta" type="number" step="0.1" class="form-control" value="1"></div>
       <div class="col-lg-2"><button class="btn btn-success w-100" onclick="saveManualScoreUI()">บันทึกคะแนน</button></div>
     </div>
-    <div class="professional-note mt-3">ใช้หน้านี้สำหรับบันทึกคะแนนรายบุคคลอย่างรวดเร็ว ส่วนการสุ่มตรวจสมุดและจับกลุ่มนักเรียนให้ใช้เมนู “สุ่ม/จับกลุ่ม” เพื่อแสดงผลแบบเหมาะกับการฉายหน้าจอ</div>
+    <div class="professional-note mt-3">ใช้หน้านี้สำหรับบันทึกคะแนนรายบุคคลอย่างรวดเร็ว ส่วนการสุ่มตรวจสมุดให้ใช้เมนู “สุ่มชื่อ” และการจัดกลุ่มให้ใช้เมนู “จับกลุ่ม” เพื่อแสดงผลแบบเหมาะกับการฉายหน้าจอ</div>
     <div id="scoreResult" class="mt-3"></div>
-  </div>
-</section>
-
-<section id="randomTools" class="section">
-  <div class="section-title"><div class="section-icon">🎲</div><h3>สุ่มชื่อ / จับกลุ่มนักเรียน</h3></div>
-  <div class="card glass-card p-3 p-md-4 mb-3">
-    <div class="row g-3 align-items-end">
-      <div class="col-lg-4"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="randomOffering" class="form-select"></select></div>
-      <div class="col-lg-4"><label class="form-label">📌 คาบเรียนสำหรับอ้างอิงการมาเรียน</label><select id="randomSession" class="form-select"><option value="">ไม่เลือกคาบ</option></select></div>
-      <div class="col-lg-4"><label class="form-label">👥 แหล่งรายชื่อ</label><select id="randomPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
-    </div>
-  </div>
-  <div class="row g-3">
-    <div class="col-xl-5">
-      <div class="card p-3 p-md-4 h-100 suspense-card">
-        <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
-          <div><h5 class="fw-bold mb-1">🎯 สุ่มรายชื่อแบบลุ้นระทึก</h5><div class="small-muted">เหมาะสำหรับฉายหน้าจอก่อนเฉลยชื่อ</div></div>
-          <span class="badge badge-soft">Display Mode</span>
-        </div>
-        <div class="row g-3 align-items-end">
-          <div class="col-6"><label class="form-label">จำนวนที่ต้องการสุ่ม</label><input id="randomCount" type="number" min="1" max="50" class="form-control" value="1"></div>
-          <div class="col-6"><button class="btn btn-primary w-100" onclick="randomStudentsUI()">เริ่มสุ่ม</button></div>
-        </div>
-        <div id="randomStage" class="random-stage mt-3"><div class="random-placeholder">กด “เริ่มสุ่ม” เพื่อเริ่มการจับรายชื่อ</div></div>
-      </div>
-    </div>
-    <div class="col-xl-7">
-      <div class="card p-3 p-md-4 h-100">
-        <h5 class="fw-bold mb-3">🧩 จับกลุ่มนักเรียน</h5>
-        <div class="row g-3 align-items-end">
-          <div class="col-md-4"><label class="form-label">จำนวนนักเรียนต่อกลุ่ม</label><input id="studentsPerGroup" type="number" min="1" class="form-control" value="4"></div>
-          <div class="col-md-4"><label class="form-label">หรือระบุจำนวนกลุ่ม</label><input id="groupCount" type="number" min="0" class="form-control" placeholder="เว้นว่างได้"></div>
-          <div class="col-md-4"><button class="btn btn-success w-100" onclick="groupStudentsUI()">จัดกลุ่ม</button></div>
-        </div>
-        <div id="groupResult" class="group-board mt-3"></div>
-      </div>
-    </div>
   </div>
 </section>
 
@@ -69,9 +32,6 @@
 </section>
 
 <script>
-function randomBasePayload_(){return {offering_id:document.getElementById('randomOffering').value,session_id:document.getElementById('randomSession').value,pool_mode:document.getElementById('randomPoolMode').value};}
-async function randomStudentsUI(){return runUiAction('randomStudentsUI',async()=>{const payload=Object.assign(randomBasePayload_(),{count:document.getElementById('randomCount').value});if(!payload.offering_id){toast('กรุณาเลือกห้อง/รายวิชาก่อนสุ่ม','warning');return;}const stage=document.getElementById('randomStage');stage.innerHTML='<div class="roulette-name">กำลังสุ่ม...</div><div class="small-muted text-center mt-2">ระบบกำลังจัดลำดับรายชื่อแบบสุ่ม</div>';const r=await call('api_randomStudents',payload,{silentLoading:true});const data=r.data||{};const names=(data.pool||[]).map(x=>x.name);let tick=0;const timer=setInterval(()=>{if(!names.length)return;stage.querySelector('.roulette-name').textContent=names[Math.floor(Math.random()*names.length)];tick++;},75);await sleep(1500+Math.min(1200,Number(payload.count||1)*250));clearInterval(timer);stage.innerHTML=`${data.fallback_reason?`<div class="alert alert-warning py-2">${escapeHtml(data.fallback_reason)}</div>`:''}<div class="winner-grid">${(data.selected||[]).map((s,i)=>`<div class="winner-card"><div class="winner-rank">#${i+1}</div><div class="winner-name">${escapeHtml(s.name)}</div><div class="winner-meta">${escapeHtml(s.student_id)} · เลขที่ ${escapeHtml(s.student_no||'-')}</div></div>`).join('')}</div><div class="small-muted text-center mt-2">ใช้รายชื่อ ${data.applied_mode==='PRESENT'?'เฉพาะผู้มาเรียน':'ทั้งห้อง'} · ทั้งหมด ${data.pool_count} คน</div>`;});}
-async function groupStudentsUI(){return runUiAction('groupStudentsUI',async()=>{const payload=Object.assign(randomBasePayload_(),{students_per_group:document.getElementById('studentsPerGroup').value,group_count:document.getElementById('groupCount').value});if(!payload.offering_id){toast('กรุณาเลือกห้อง/รายวิชาก่อนจัดกลุ่ม','warning');return;}const box=document.getElementById('groupResult');box.innerHTML='<div class="empty-state">กำลังจัดกลุ่ม...</div>';const r=await call('api_groupStudents',payload,{silentLoading:true});const d=r.data||{};box.innerHTML=`${d.fallback_reason?`<div class="alert alert-warning py-2">${escapeHtml(d.fallback_reason)}</div>`:''}<div class="group-grid">${(d.groups||[]).map(g=>`<div class="group-card"><div class="group-title">กลุ่ม ${g.group_no} <span>${g.members.length} คน</span></div>${g.members.map(m=>`<div class="group-member"><b>${escapeHtml(m.name)}</b><small>${escapeHtml(m.student_id)} · เลขที่ ${escapeHtml(m.student_no||'-')}</small></div>`).join('')}</div>`).join('')}</div>${(d.ungrouped||[]).length?`<div class="ungrouped-box mt-3"><b>รายชื่อที่ยังไม่ถูกจัดกลุ่ม</b><br>${d.ungrouped.map(s=>escapeHtml(s.name)+' ('+escapeHtml(s.student_id)+')').join(', ')}</div>`:''}`;});}
 async function randomBookUI(){return runUiAction('randomBookUI',async()=>{const sid=document.getElementById('scoreSession').value;const r=await call('api_randomBookCheck',sid,5);document.getElementById('scoreResult').innerHTML=(r.data||[]).map(x=>`<div class="border rounded p-2 mb-2">${escapeHtml(x.student_id)} <button class="btn btn-sm btn-success" onclick="saveBook('${escapeAttr(sid)}','${escapeAttr(x.student_id)}','BROUGHT')">นำสมุดมา</button> <button class="btn btn-sm btn-danger" onclick="saveBook('${escapeAttr(sid)}','${escapeAttr(x.student_id)}','NOT_BROUGHT')">ไม่ได้นำมา</button></div>`).join('')||'<div class="alert alert-info">ไม่พบรายชื่อสำหรับสุ่ม</div>';});}
 async function saveBook(sid,studentId,result){return runUiAction('saveBook',async()=>{await call('api_saveBookCheckResult',{session_id:sid,student_id:studentId,result});toast('บันทึกผลตรวจสมุดเรียบร้อย','success');});}
 async function saveManualScoreUI(){return runUiAction('saveManualScoreUI',async()=>{await call('api_saveManualScore',{session_id:document.getElementById('scoreSession').value,student_id:document.getElementById('manualStudentId').value,score_title:document.getElementById('manualTitle').value,score_delta:document.getElementById('manualDelta').value});toast('บันทึกคะแนนเรียบร้อย','success');});}

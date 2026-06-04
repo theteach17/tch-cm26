@@ -47,16 +47,100 @@ function saveManualScore(payload) {
   appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
   return ok_({ count: manualRows.length }, 'Manual scores saved');
 }
+/**
+ * Lightweight projection reader for dashboard counters.
+ * It reads only the columns needed by the dashboard, instead of getRows_() on entire sheets.
+ * This prevents the home page from becoming a bottleneck when submissions/attendance grow.
+ */
+function getProjectedRowsForDashboard_(sheetName, fields) {
+  const sh = sh_(sheetName);
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return [];
+  const header = headerMap_(sheetName);
+  const n = lastRow - 1;
+  const cols = {};
+  fields.forEach(function (f) {
+    const idx = header.map[f];
+    if (idx === undefined) {
+      cols[f] = Array(n).fill('');
+    } else {
+      cols[f] = sh.getRange(2, idx + 1, n, 1).getValues().map(function (r) { return r[0]; });
+    }
+  });
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const obj = { __row: i + 2 };
+    fields.forEach(function (f) { obj[f] = cols[f][i]; });
+    out.push(obj);
+  }
+  return out;
+}
+
 function getDashboardData() {
   const termId = getActiveTerm_();
-  const sessions = getRows_(SHEETS.SESSIONS).filter(r => String(r.term_id) === termId);
-  const allowedOfferings = new Set(listActiveOfferings().map(o => String(o.offering_id)));
-  const activeSessions = sessions.filter(r => String(r.status) === 'ACTIVE' && allowedOfferings.has(String(r.offering_id)));
-  const submissions = getRows_(SHEETS.NORMALIZED_SUBMISSIONS).filter(r => String(r.term_id) === termId);
-  const pending = submissions.filter(r => String(r.review_status) === 'PENDING').length;
-  const voided = submissions.filter(r => String(r.score_status) === 'VOIDED').length;
-  const attendanceToday = getRows_(SHEETS.ATTENDANCE_LOG).filter(r => String(r.term_id) === termId && toDateOnly_(r.created_at || now_()) === toDateOnly_(now_()) && String(r.attendance_status) === 'PRESENT').length;
-  return ok_({ termId, activeSessions, totalSessions:sessions.length, submissions:submissions.length, pendingReview:pending, voided, attendanceToday, offerings:listActiveOfferings() }, 'Dashboard loaded');
+  const user = getCurrentUser();
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'DASH_V25_' + termId + '_' + String(user.email || '').toLowerCase();
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return ok_(JSON.parse(cached), 'Dashboard loaded from cache');
+  }
+
+  const started = Date.now();
+  const offerings = listUiOfferings_ ? listUiOfferings_() : listActiveOfferings();
+  const allowedOfferings = new Set(offerings.map(function (o) { return String(o.offering_id); }));
+
+  // Sessions are small, but still read only the required columns.
+  const sessions = getProjectedRowsForDashboard_(SHEETS.SESSIONS, [
+    'term_id','status','offering_id','session_id','class_code','session_date','period_no','lesson_title'
+  ]).filter(function (r) { return String(r.term_id) === String(termId); });
+  const activeSessions = sessions.filter(function (r) {
+    return String(r.status) === 'ACTIVE' && allowedOfferings.has(String(r.offering_id));
+  });
+
+  let submissions = 0, pending = 0, voided = 0;
+  try {
+    getProjectedRowsForDashboard_(SHEETS.NORMALIZED_SUBMISSIONS, [
+      'term_id','review_status','score_status'
+    ]).forEach(function (r) {
+      if (String(r.term_id) !== String(termId)) return;
+      submissions++;
+      if (String(r.review_status) === 'PENDING') pending++;
+      if (String(r.score_status) === 'VOIDED') voided++;
+    });
+  } catch (err) {
+    // Dashboard must never block the Web App startup. Return a warning instead.
+    console.warn('Dashboard submission counters skipped: ' + err.message);
+  }
+
+  let attendanceToday = 0;
+  const today = toDateOnly_(now_());
+  try {
+    getProjectedRowsForDashboard_(SHEETS.ATTENDANCE_LOG, [
+      'term_id','created_at','checkin_time','attendance_status'
+    ]).forEach(function (r) {
+      if (String(r.term_id) !== String(termId)) return;
+      const d = toDateOnly_(r.created_at || r.checkin_time || now_());
+      if (d === today && String(r.attendance_status) === 'PRESENT') attendanceToday++;
+    });
+  } catch (err) {
+    console.warn('Dashboard attendance counter skipped: ' + err.message);
+  }
+
+  const data = {
+    termId,
+    activeSessions,
+    totalSessions: sessions.length,
+    submissions,
+    pendingReview: pending,
+    voided,
+    attendanceToday,
+    offerings,
+    generatedAt: now_(),
+    elapsedMs: Date.now() - started
+  };
+  try { cache.put(cacheKey, JSON.stringify(sanitizeForClient_(data)), 45); } catch (err) {}
+  return ok_(data, 'Dashboard loaded');
 }
 function getGradebook(payload) {
   payload = payload || {};
@@ -133,4 +217,38 @@ function regenerateRoomSheet(offeringId) {
   if (values.length) sh.getRange(2,1,values.length,headers.length).setValues(values);
   sh.setFrozenRows(1); sh.setFrozenColumns(3); sh.autoResizeColumns(1, Math.min(headers.length, 20));
   return ok_({ sheetName, rows: values.length }, 'Room sheet regenerated');
+}
+
+/**
+ * v2.6: batch save book check results from the random-name page.
+ * This prevents multiple google.script.run calls when a teacher records book-check scores for several students.
+ */
+function saveBookCheckBatch(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  validate_(payload, { session_id: { required: true, maxLen: 120 }, note: { maxLen: 500 } });
+  const results = Array.isArray(payload.results) ? payload.results : [];
+  if (!results.length) throw new Error('ไม่มีรายการนักเรียนสำหรับบันทึกคะแนนสมุด');
+  if (results.length > 60) throw new Error('รายการมากเกินไป กรุณาบันทึกครั้งละไม่เกิน 60 คน');
+  const session = findOne_(SHEETS.SESSIONS, function (r) { return String(r.session_id) === String(payload.session_id); });
+  if (!session) throw new Error('ไม่พบคาบเรียนที่เลือก');
+  assertOfferingAccess_(session.offering_id);
+  const bookRows = [];
+  const scoreRows = [];
+  results.forEach(function (item) {
+    const studentId = cleanId_(item.student_id);
+    if (!studentId) return;
+    const result = String(item.result || 'BROUGHT').toUpperCase();
+    const delta = item.score_delta !== undefined && item.score_delta !== ''
+      ? Number(item.score_delta)
+      : (result === 'BROUGHT' ? numericOrZero_(getSetting_('DEFAULT_BOOK_BROUGHT_SCORE') || 1) : numericOrZero_(getSetting_('DEFAULT_BOOK_NOT_BROUGHT_SCORE') || -1));
+    const id = uuid_('BOOK');
+    const title = result === 'BROUGHT' ? 'นำสมุดมา' : 'ไม่นำสมุดมา';
+    bookRows.push({ book_check_id:id, term_id: session.term_id, session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, is_random: true, result: result, score_delta: delta, checked_by: getUserEmail_(), checked_at: now_(), note: payload.note || 'บันทึกจากเมนูสุ่มชื่อ' });
+    scoreRows.push({ score_event_id:'SCORE-' + id, term_id: session.term_id, event_date: toDateOnly_(session.session_date), session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, event_type:'BOOK_CHECK', score_title:title, score_delta: delta, source_type:'BOOK_CHECK', source_ref:id, status:'ACTIVE', void_reason:'', created_by:getUserEmail_(), created_at:now_(), updated_at:now_() });
+  });
+  if (!bookRows.length) throw new Error('ไม่พบเลขประจำตัวนักเรียนที่ถูกต้องสำหรับบันทึกคะแนน');
+  appendObjects_(SHEETS.BOOK_CHECK_LOG, bookRows);
+  appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
+  return ok_({ count: bookRows.length }, 'บันทึกคะแนนสมุดแบบกลุ่มสำเร็จ');
 }

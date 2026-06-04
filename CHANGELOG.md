@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v2.6.0-random-group-workflow
+- แยกเมนู “สุ่มชื่อ” และ “จับกลุ่ม” ออกจากกัน เพื่อให้พื้นที่แสดงผลของการสุ่มใหญ่ขึ้นและเหมาะกับการฉายหน้าจอมากขึ้น
+- ปรับหน้า “สุ่มชื่อ” เป็น display mode แบบเต็มพื้นที่ พร้อม countdown, roulette animation, winner cards และแผงบันทึกคะแนนสมุด
+- เพิ่มการเลือกคาบเรียนในเมนูสุ่มและเมนูจับกลุ่ม โดยโหลดคาบตามห้อง/รายวิชาที่เลือก ไม่จำกัดแค่ dropdown ห้อง
+- เพิ่ม API `api_listToolSessions()` สำหรับโหลดคาบ ACTIVE/CLOSED ล่าสุดของห้องที่เลือก เพื่อใช้ประกอบการสุ่ม/จับกลุ่มจากรายชื่อทั้งห้องหรือเฉพาะผู้มาเรียน
+- เพิ่ม API `api_saveBookCheckBatch()` สำหรับบันทึกคะแนนสมุดจากรายชื่อที่สุ่มได้แบบ batch ลดจำนวน request และลดโอกาส timeout
+- ปรับ startup ให้ไม่เรียก dashboard counters อัตโนมัติ ลดอาการเปิดหน้าแล้วค้างที่ “กำลังประมวลผล”
+- คง workflow หลักของการเปิดคาบ สแกน ดึง Form ตรวจงาน และ ScoreLedger เดิม ไม่เปลี่ยน data model
+
+
 ## 2.4.0-classroom-ux-tools
 - ปรับข้อความแจ้งเตือนให้เป็นรูปแบบมืออาชีพและอ่านง่ายขึ้น
 - ปรับหน้าเมนูคะแนน/สมุดคะแนนให้มี summary cards และตารางที่อ่านง่ายขึ้น
@@ -13,3 +23,10 @@
 
 ## 2.3.0-review-image-proxy
 - เพิ่ม proxy โหลดรูปภาพตรวจงาน
+
+## v2.5.0-dashboard-startup-stability
+- Fixed Web App startup hang caused by the dashboard loading heavy counters through `api_getDashboardData` during bootstrap.
+- Optimized `getDashboardData()` to use projected column reads and short CacheService cache instead of full-sheet object reads for every dashboard refresh.
+- Changed bootstrap so dashboard counters are non-blocking. Core menus remain usable even if dashboard counters are slow.
+- Added client-side request timeout support to `call()` to prevent the global loading overlay from staying forever.
+- Added loading overlay reference counting and force-safe hide behavior.

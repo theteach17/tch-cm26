@@ -253,3 +253,28 @@ function getAttendanceSummary(payload) {
   };
   return ok_({ summary: summary, rows: Object.values(byStudent).sort(function (a, b) { return String(a.student_no).localeCompare(String(b.student_no), undefined, { numeric: true }); }) }, 'โหลดสรุปการเข้าเรียนสำเร็จ');
 }
+
+/**
+ * v2.6: lightweight session list for random/group tools.
+ * Returns active and recent closed sessions for the selected offering so teachers can choose
+ * whether a random/grouping action should use all roster or present-only attendance data.
+ */
+function listClassroomToolSessions(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  validate_(payload, { offering_id: { required: true, maxLen: 120 }, limit: { type: 'number' } });
+  const offering = getOffering_(payload.offering_id);
+  if (!offering) throw new Error('ไม่พบห้อง/รายวิชาในระบบ');
+  assertOfferingAccess_(offering.offering_id);
+  const termId = payload.term_id || getActiveTerm_();
+  const limit = Math.max(1, Math.min(Number(payload.limit || 40), 100));
+  const rows = getRows_(SHEETS.SESSIONS).filter(function (s) {
+    return String(s.term_id) === String(termId) && String(s.offering_id) === String(offering.offering_id) && String(s.status).toUpperCase() !== 'CANCELLED';
+  }).sort(function (a, b) {
+    const sa = String(a.status).toUpperCase() === 'ACTIVE' ? 0 : 1;
+    const sb = String(b.status).toUpperCase() === 'ACTIVE' ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    return String(b.session_date || '').localeCompare(String(a.session_date || '')) || Number(b.period_no || 0) - Number(a.period_no || 0);
+  }).slice(0, limit);
+  return ok_({ sessions: rows, offering: offering }, 'โหลดคาบเรียนสำหรับสุ่ม/จับกลุ่มสำเร็จ');
+}

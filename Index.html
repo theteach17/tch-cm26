@@ -30,7 +30,8 @@
     <button class="nav-btn" data-section="sync">🔄 ดึงข้อมูล Form</button>
     <button class="nav-btn" data-section="review">🖼️ ตรวจงาน</button>
     <button class="nav-btn" data-section="scores">⭐ คะแนนสมุด/พิเศษ</button>
-    <button class="nav-btn" data-section="randomTools">🎲 สุ่ม/จับกลุ่ม</button>
+    <button class="nav-btn" data-section="randomName">🎲 สุ่มชื่อ</button>
+    <button class="nav-btn" data-section="grouping">🧩 จับกลุ่ม</button>
     <button class="nav-btn" data-section="gradebook">📊 สมุดคะแนน</button>
     <button class="nav-btn" data-section="archive">🗃️ Archive</button>
     <hr class="border-light opacity-25">
@@ -50,6 +51,8 @@
     <?!= include('topicsSync'); ?>
     <?!= include('review'); ?>
     <?!= include('gradebook'); ?>
+    <?!= include('random'); ?>
+    <?!= include('grouping'); ?>
   </main>
 </div>
 <?!= include('utils'); ?>

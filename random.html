@@ -1,0 +1,54 @@
+<section id="randomName" class="section">
+  <div class="section-title"><div class="section-icon">🎲</div><h3>สุ่มชื่อนักเรียน</h3></div>
+  <div class="card glass-card p-3 p-md-4 mb-3 random-control-card">
+    <div class="row g-3 align-items-end">
+      <div class="col-xl-3 col-lg-4"><label class="form-label">🏫 ห้อง/รายวิชา</label><select id="randomOffering" class="form-select" onchange="loadRandomSessionsUI()"></select></div>
+      <div class="col-xl-3 col-lg-4"><label class="form-label">📌 คาบเรียน</label><select id="randomSession" class="form-select"><option value="">ไม่เลือกคาบ</option></select></div>
+      <div class="col-xl-3 col-lg-4"><label class="form-label">👥 แหล่งรายชื่อ</label><select id="randomPoolMode" class="form-select"><option value="ALL">รายชื่อทั้งห้อง</option><option value="PRESENT">เฉพาะคนที่มาในคาบนั้น</option></select></div>
+      <div class="col-xl-1 col-md-4"><label class="form-label">จำนวน</label><input id="randomCount" type="number" min="1" max="50" class="form-control" value="1"></div>
+      <div class="col-xl-2 col-md-8"><button class="btn btn-primary w-100 big-action-btn" onclick="randomStudentsUI()">✨ เริ่มสุ่ม</button></div>
+    </div>
+    <div class="professional-note mt-3">ถ้าเลือก “เฉพาะคนที่มาในคาบนั้น” แต่คาบยังไม่ได้ปิดยอดขาดเรียน ระบบจะใช้รายชื่อทั้งห้องโดยอัตโนมัติตามเงื่อนไขที่กำหนดไว้</div>
+  </div>
+  <div class="row g-3">
+    <div class="col-xl-8">
+      <div class="random-showcase">
+        <div class="random-lights"><span></span><span></span><span></span><span></span><span></span></div>
+        <div id="randomStage" class="random-stage-xl">
+          <div class="random-placeholder-xl">เลือกห้องและกด “เริ่มสุ่ม”</div>
+          <div class="random-subtitle">ระบบจะแสดงชื่อแบบขนาดใหญ่ เหมาะสำหรับฉายหน้าจอในห้องเรียน</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card p-3 h-100 random-result-panel">
+        <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold mb-0">📋 รายชื่อที่สุ่มได้</h5><span id="randomPoolInfo" class="badge badge-soft">ยังไม่สุ่ม</span></div>
+        <div id="randomSelectedList" class="selected-list-empty">ยังไม่มีรายการสุ่ม</div>
+        <hr>
+        <div class="book-score-panel">
+          <h6 class="fw-bold">📘 บันทึกคะแนนสมุดจากผลสุ่ม</h6>
+          <div class="row g-2 align-items-end">
+            <div class="col-6"><label class="form-label small">คะแนนนำสมุดมา</label><input id="randomBookScoreGood" class="form-control" type="number" step="0.1" value="1"></div>
+            <div class="col-6"><label class="form-label small">คะแนนไม่ได้นำมา</label><input id="randomBookScoreBad" class="form-control" type="number" step="0.1" value="-1"></div>
+            <div class="col-6"><button class="btn btn-success w-100" onclick="saveRandomBookBatchUI('BROUGHT')">✅ ทั้งหมดนำมา</button></div>
+            <div class="col-6"><button class="btn btn-danger w-100" onclick="saveRandomBookBatchUI('NOT_BROUGHT')">❌ ทั้งหมดไม่ได้นำมา</button></div>
+          </div>
+          <div class="small-muted mt-2">การบันทึกคะแนนสมุดต้องเลือกคาบเรียนก่อน เพื่อให้คะแนนเชื่อมกับคาบใน ScoreLedger ได้ถูกต้อง</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+function randomPayload_(){return {offering_id:document.getElementById('randomOffering').value,session_id:document.getElementById('randomSession').value,pool_mode:document.getElementById('randomPoolMode').value};}
+async function loadRandomSessionsUI(){return runUiAction('loadRandomSessionsUI',async()=>{const offeringId=document.getElementById('randomOffering').value;const el=document.getElementById('randomSession');if(!el)return;el.innerHTML='<option value="">กำลังโหลดคาบ...</option>';if(!offeringId){el.innerHTML='<option value="">ไม่เลือกคาบ</option>';return;}const r=await call('api_listToolSessions',{offering_id:offeringId,limit:40},{silentLoading:true,timeoutMs:12000});const rows=(r.data&&r.data.sessions)||[];el.innerHTML='<option value="">ไม่เลือกคาบ / ใช้รายชื่อทั้งห้อง</option>'+rows.map(s=>`<option value="${escapeAttr(s.session_id)}">${escapeHtml(s.class_code)} · ${escapeHtml(formatThaiDateDisplay(s.session_date)||s.session_date)} · คาบ ${escapeHtml(s.period_no||'-')} · ${escapeHtml(s.lesson_title||'')} · ${escapeHtml(s.status||'')}</option>`).join('');});}
+async function randomStudentsUI(){return runUiAction('randomStudentsUI',async()=>{const payload=Object.assign(randomPayload_(),{count:document.getElementById('randomCount').value});if(!payload.offering_id){toast('กรุณาเลือกห้อง/รายวิชาก่อนสุ่ม','warning');return;}const stage=document.getElementById('randomStage');const list=document.getElementById('randomSelectedList');const poolInfo=document.getElementById('randomPoolInfo');stage.innerHTML='<div class="random-countdown">3</div><div class="random-subtitle">เตรียมสุ่มรายชื่อ...</div>';await sleep(420);stage.querySelector('.random-countdown').textContent='2';await sleep(420);stage.querySelector('.random-countdown').textContent='1';await sleep(420);stage.innerHTML='<div class="roulette-name-xl">กำลังสุ่ม...</div><div class="random-subtitle">รายชื่อกำลังหมุน...</div>';
+    const r=await call('api_randomStudents',payload,{silentLoading:true,timeoutMs:18000});const data=r.data||{};const pool=(data.pool||[]);const names=pool.map(x=>x.name);let tick=0;const timer=setInterval(()=>{if(!names.length)return;const el=stage.querySelector('.roulette-name-xl');if(el){el.textContent=names[Math.floor(Math.random()*names.length)];el.classList.toggle('pulse',tick%2===0);}tick++;},55);await sleep(1600+Math.min(1600,Number(payload.count||1)*280));clearInterval(timer);state.random={selected:data.selected||[],payload:payload,data:data};const selected=state.random.selected;stage.innerHTML=`${data.fallback_reason?`<div class="alert alert-warning py-2 mb-3">${escapeHtml(data.fallback_reason)}</div>`:''}<div class="winner-display-grid ${selected.length===1?'single':''}">${selected.map((s,i)=>`<div class="winner-display-card"><div class="winner-crown">${i===0?'🏆':'⭐'}</div><div class="winner-rank">#${i+1}</div><div class="winner-name-xl">${escapeHtml(s.name)}</div><div class="winner-meta-xl">${escapeHtml(s.student_id)} · เลขที่ ${escapeHtml(s.student_no||'-')}</div></div>`).join('')}</div>`;
+    poolInfo.textContent=`${data.applied_mode==='PRESENT'?'เฉพาะผู้มาเรียน':'ทั้งห้อง'} · ${data.pool_count||0} คน`;
+    list.innerHTML=selected.length?selected.map((s,i)=>`<div class="selected-student-row" id="randomStu_${escapeAttr(s.student_id)}"><div><b>${i+1}. ${escapeHtml(s.name)}</b><small>${escapeHtml(s.student_id)} · เลขที่ ${escapeHtml(s.student_no||'-')}</small></div><div class="btn-group btn-group-sm"><button class="btn btn-outline-success" onclick="saveRandomBookOneUI('${escapeAttr(s.student_id)}','BROUGHT')">นำมา</button><button class="btn btn-outline-danger" onclick="saveRandomBookOneUI('${escapeAttr(s.student_id)}','NOT_BROUGHT')">ไม่มา</button></div></div>`).join(''):'<div class="selected-list-empty">ไม่พบรายชื่อที่สุ่มได้</div>';
+  });}
+function randomBookScoreFor_(result){return result==='BROUGHT'?document.getElementById('randomBookScoreGood').value:document.getElementById('randomBookScoreBad').value;}
+async function saveRandomBookOneUI(studentId,result){return runUiAction('saveRandomBookOneUI',async()=>{const sid=document.getElementById('randomSession').value;if(!sid){toast('กรุณาเลือกคาบเรียนก่อนบันทึกคะแนนสมุด','warning');return;}const payload={session_id:sid,results:[{student_id:studentId,result:result,score_delta:randomBookScoreFor_(result)}],note:'บันทึกจากเมนูสุ่มชื่อ'};await call('api_saveBookCheckBatch',payload,{timeoutMs:18000});const row=document.getElementById('randomStu_'+studentId);if(row)row.classList.add(result==='BROUGHT'?'book-saved-good':'book-saved-bad');toast('บันทึกคะแนนสมุดเรียบร้อย','success');});}
+async function saveRandomBookBatchUI(result){return runUiAction('saveRandomBookBatchUI',async()=>{const sid=document.getElementById('randomSession').value;const selected=(state.random&&state.random.selected)||[];if(!sid){toast('กรุณาเลือกคาบเรียนก่อนบันทึกคะแนนสมุด','warning');return;}if(!selected.length){toast('ยังไม่มีรายชื่อที่สุ่มได้','warning');return;}const ok=await confirmAction('ยืนยันบันทึกคะแนนสมุด',`จะบันทึกผล “${result==='BROUGHT'?'นำสมุดมา':'ไม่ได้นำสมุดมา'}” ให้ ${selected.length} คน ยืนยันหรือไม่`);if(!ok)return;const payload={session_id:sid,results:selected.map(s=>({student_id:s.student_id,result:result,score_delta:randomBookScoreFor_(result)})),note:'บันทึกแบบกลุ่มจากเมนูสุ่มชื่อ'};const r=await call('api_saveBookCheckBatch',payload,{timeoutMs:24000});(selected||[]).forEach(s=>{const row=document.getElementById('randomStu_'+s.student_id);if(row)row.classList.add(result==='BROUGHT'?'book-saved-good':'book-saved-bad');});toast(`บันทึกคะแนนสมุด ${r.data.count||selected.length} รายการเรียบร้อย`,'success');});}
+</script>
