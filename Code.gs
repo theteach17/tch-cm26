@@ -5,6 +5,7 @@ function doGet(e) {
   return tpl.evaluate()
     .setTitle(APP.NAME)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .setFaviconUrl('https://img2.pic.in.th/pic/logofd3322a65d133ac4.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 function include(filename) {
