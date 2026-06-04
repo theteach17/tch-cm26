@@ -57,6 +57,125 @@ function makeDriveViewUrl_(url) {
   const id = extractDriveFileId_(url);
   return id ? 'https://drive.google.com/file/d/' + id + '/view?usp=drivesdk' : String(url || '');
 }
+
+/**
+ * Build an authenticated, browser-safe image data URL for review display.
+ * Direct Google Drive thumbnail URLs can sometimes render as corrupted/noisy
+ * images inside HtmlService.  The safer approach is to fetch the Drive thumbnail
+ * server-side with the Apps Script OAuth token, then send a data URL to the
+ * browser for the single item currently being reviewed.
+ */
+function getDriveFileMetadataForImage_(fileId) {
+  fileId = validateSpreadsheetId_(fileId, 'file_id');
+  const url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) +
+    '?fields=id,name,mimeType,size,thumbnailLink,webViewLink&supportsAllDrives=true';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'get',
+    muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  const code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('Drive metadata fetch failed (' + code + '): ' + res.getContentText().slice(0, 200));
+  }
+  return JSON.parse(res.getContentText());
+}
+
+function resizeDriveThumbnailLink_(link, size) {
+  let url = String(link || '');
+  if (!url) return '';
+  size = Number(size || 1600);
+  size = Math.max(400, Math.min(2400, size));
+  // Common Drive thumbnail links end with =s220 or =s220-k.  Preserve suffixes.
+  if (/=s\d+(-[a-z])?$/i.test(url)) return url.replace(/=s\d+(-[a-z])?$/i, '=s' + size + '$1');
+  if (/[?&]sz=w\d+/i.test(url)) return url.replace(/([?&]sz=w)\d+/i, '$1' + size);
+  return url;
+}
+
+function fetchUrlAsDataUrl_(url) {
+  const res = UrlFetchApp.fetch(url, {
+    method: 'get',
+    muteHttpExceptions: true,
+    followRedirects: true,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  const code = res.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error('Image fetch failed (' + code + ')');
+  const blob = res.getBlob();
+  const contentType = String(blob.getContentType() || res.getHeaders()['Content-Type'] || 'image/jpeg').split(';')[0];
+  if (contentType.indexOf('image/') !== 0) throw new Error('Fetched content is not an image: ' + contentType);
+  const bytes = blob.getBytes();
+  if (bytes.length > 12 * 1024 * 1024) throw new Error('Image is too large to embed safely: ' + bytes.length + ' bytes');
+  return 'data:' + contentType + ';base64,' + Utilities.base64Encode(bytes);
+}
+
+function getDriveImageDataForClient_(payload) {
+  payload = payload || {};
+  const fileId = extractDriveFileId_(payload.file_id || payload.file_url || payload.preview_url || payload.url);
+  if (!fileId) throw new Error('ไม่พบ file_id ของรูปภาพ');
+  const preferredSize = Number(payload.preferred_size || 1600);
+  const meta = getDriveFileMetadataForImage_(fileId);
+  const viewUrl = meta.webViewLink || makeDriveViewUrl_(fileId);
+  const fallbackPreviewUrl = makePreviewUrl_(fileId);
+
+  // 1) Preferred: authenticated Drive thumbnail proxy.  This normally converts
+  // HEIC/large camera uploads into a browser-safe JPEG thumbnail.
+  if (meta.thumbnailLink) {
+    try {
+      const thumbUrl = resizeDriveThumbnailLink_(meta.thumbnailLink, preferredSize);
+      const dataUrl = fetchUrlAsDataUrl_(thumbUrl);
+      return ok_({
+        file_id: fileId,
+        name: meta.name || '',
+        mime_type: meta.mimeType || '',
+        size: meta.size || '',
+        source: 'drive_thumbnail_proxy',
+        data_url: dataUrl,
+        view_url: viewUrl,
+        fallback_preview_url: fallbackPreviewUrl
+      }, 'Image loaded via Drive thumbnail proxy');
+    } catch (thumbErr) {
+      console.warn('thumbnail proxy failed, fallback to original blob', thumbErr);
+    }
+  }
+
+  // 2) Fallback: original file blob if the browser can display the mime type.
+  try {
+    const file = DriveApp.getFileById(fileId);
+    const blob = file.getBlob();
+    const contentType = String(blob.getContentType() || meta.mimeType || '').split(';')[0];
+    const browserSafe = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'].indexOf(contentType.toLowerCase()) >= 0;
+    if (browserSafe && blob.getBytes().length <= 12 * 1024 * 1024) {
+      return ok_({
+        file_id: fileId,
+        name: file.getName(),
+        mime_type: contentType,
+        size: blob.getBytes().length,
+        source: 'drive_original_blob',
+        data_url: 'data:' + contentType + ';base64,' + Utilities.base64Encode(blob.getBytes()),
+        view_url: viewUrl,
+        fallback_preview_url: fallbackPreviewUrl
+      }, 'Image loaded via original Drive blob');
+    }
+  } catch (blobErr) {
+    console.warn('original image blob fallback failed', blobErr);
+  }
+
+  // 3) Last resort: return URLs only.  The frontend will show a warning and the
+  // teacher can open the native Drive preview.
+  return ok_({
+    file_id: fileId,
+    name: meta.name || '',
+    mime_type: meta.mimeType || '',
+    size: meta.size || '',
+    source: 'url_fallback_only',
+    data_url: '',
+    view_url: viewUrl,
+    fallback_preview_url: fallbackPreviewUrl,
+    warning: 'ไม่สามารถสร้างรูป preview แบบปลอดภัยได้ กรุณาเปิดไฟล์ต้นฉบับใน Google Drive'
+  }, 'Image URL fallback only');
+}
+
 function classTextToCode_(classText) {
   const s = String(classText || '').trim();
   const m = s.match(/(?:ม\.|ม|M)?\s*(\d+)\s*\/\s*(\d+)/i);

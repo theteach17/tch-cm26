@@ -342,6 +342,21 @@ function ensureReviewIndexSheet_() {
   return ensureSheet_(SHEETS.REVIEW_INDEX, SCHEMA[SHEETS.REVIEW_INDEX]);
 }
 
+
+function reviewTopicDateLabel_(v) {
+  if (!v) return '';
+  try {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return Utilities.formatDate(d, tz_(), 'yyyy-MM-dd');
+  } catch (err) {}
+  return String(v || '').replace(/\s+00:00:00\s+GMT.*$/i, '').trim();
+}
+function reviewTopicLabel_(t) {
+  const name = String(t.display_topic_name || t.form_topic_text || t.topic_id || '').trim();
+  const d = reviewTopicDateLabel_(t.assigned_date || '');
+  return d ? name + ' · ' + d : name;
+}
+
 function listReviewTopics(filters) {
   filters = filters || {};
   validate_(filters, { class_code: { maxLen: 20 }, offering_id: { maxLen: 120 }, term_id: { maxLen: 40 } });
@@ -377,7 +392,7 @@ function listReviewTopics(filters) {
     topics: topics.map(function (t) {
       return Object.assign({}, t, {
         indexed_count: countByTopic[String(t.topic_id)] || 0,
-        label: (t.display_topic_name || t.form_topic_text || t.topic_id) + ' · ' + (t.assigned_date || '')
+        label: reviewTopicLabel_(t)
       });
     })
   }, 'Review topics loaded');

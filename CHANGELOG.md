@@ -1,3 +1,11 @@
+## v2.3.0 - Review Image Proxy Fix
+- Fixed corrupted/noisy Google Drive image previews in the Review page.
+- Added `api_getReviewImageData()` and server-side authenticated Drive thumbnail proxy.
+- Main review image now loads one item at a time as a data URL from Apps Script instead of embedding raw Drive thumbnail URLs directly.
+- Added image reload button and safer fallback to original Drive preview when proxy generation is unavailable.
+- Replaced thumbnail strip image loading with lightweight image-number buttons to prevent multiple corrupted preview loads.
+- Normalized review topic date labels so date objects do not appear as long GMT strings in the topic dropdown.
+
 
 ## v2.2.0 - Scan Lock Queue Serialization
 - Prevented overlapping `api_processScanBatch` calls from the same browser by adding a client-side `isFlushing` guard.

@@ -145,6 +145,7 @@ function api_listReviewTopics(filters) { return guardedCall_(['ADMIN','TEACHER']
 function api_listSubmissionsForReview(filters) { return guardedCall_(['ADMIN','TEACHER'], listSubmissionsForReview, filters || {}); }
 function api_rebuildReviewIndex(payload) { return guardedCall_(['ADMIN','TEACHER'], rebuildReviewIndex, payload || {}); }
 function api_reviewSubmission(submissionId, action, reason, note) { return guardedCall_(['ADMIN','TEACHER'], reviewSubmission, submissionId, action, reason, note); }
+function api_getReviewImageData(payload) { return guardedCall_(['ADMIN','TEACHER'], getDriveImageDataForClient_, payload || {}); }
 function api_randomBookCheck(sessionId, count) { return guardedCall_(['ADMIN','TEACHER'], randomBookCheck, sessionId, count); }
 function api_saveBookCheckResult(payload) { return guardedCall_(['ADMIN','TEACHER'], saveBookCheckResult, payload || {}); }
 function api_saveManualScore(payload) { return guardedCall_(['ADMIN','TEACHER'], saveManualScore, payload || {}); }

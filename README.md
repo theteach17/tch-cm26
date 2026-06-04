@@ -1,6 +1,6 @@
 # Classroom Management Ledger System
 
-Current version: `v2.2.0-scan-leading-zero-normalization`
+Current version: `v2.3.0-review-image-proxy`
 
 ระบบ Web App สำหรับจัดการคาบเรียน การสแกนบัตรเข้าเรียน การดึงข้อมูลส่งงานจาก Google Form Responses เดิม การตรวจรูปงาน การยกเลิก/คืนคะแนน และการสร้างสมุดคะแนนรายห้อง โดยใช้ Google Apps Script + Google Sheets เป็นฐานข้อมูล
 
