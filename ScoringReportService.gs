@@ -98,7 +98,21 @@ function getGradebook(payload) {
       if (!sub) byStudent[sid].missing_count++;
     });
   });
-  return ok_({ offering, topics, rows:Object.values(byStudent).sort((a,b) => String(a.student_no).localeCompare(String(b.student_no), undefined, {numeric:true}) || String(a.student_id).localeCompare(String(b.student_id))) }, 'Gradebook loaded');
+  let attendanceSummary = null;
+  try {
+    attendanceSummary = getAttendanceSummary({ offering_id: offeringId, term_id: termId }).data;
+    Object.keys(byStudent).forEach(function (sid) {
+      const attRow = (attendanceSummary.rows || []).find(function (r) { return String(r.student_id) === String(sid); }) || {};
+      byStudent[sid].present_count = attRow.present || 0;
+      byStudent[sid].absent_count = attRow.absent || 0;
+      byStudent[sid].late_count = attRow.late || 0;
+      byStudent[sid].excused_count = attRow.excused || 0;
+      byStudent[sid].attendance_rate = attRow.rate || 0;
+    });
+  } catch (err) {
+    attendanceSummary = { summary: {}, rows: [], warning: err.message };
+  }
+  return ok_({ offering, topics, attendanceSummary: attendanceSummary, rows:Object.values(byStudent).sort((a,b) => String(a.student_no).localeCompare(String(b.student_no), undefined, {numeric:true}) || String(a.student_id).localeCompare(String(b.student_id))) }, 'Gradebook loaded');
 }
 function regenerateActiveRoomSheets() {
   const termId = getActiveTerm_();

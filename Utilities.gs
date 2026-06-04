@@ -114,9 +114,29 @@ function getDriveImageDataForClient_(payload) {
   const fileId = extractDriveFileId_(payload.file_id || payload.file_url || payload.preview_url || payload.url);
   if (!fileId) throw new Error('ไม่พบ file_id ของรูปภาพ');
   const preferredSize = Number(payload.preferred_size || 1600);
-  const meta = getDriveFileMetadataForImage_(fileId);
+  let meta = {};
+  let metadataError = '';
+  try {
+    meta = getDriveFileMetadataForImage_(fileId);
+  } catch (err) {
+    metadataError = err && err.message ? err.message : String(err || '');
+    meta = { id: fileId, name: '', mimeType: '', size: '', thumbnailLink: '', webViewLink: '' };
+  }
   const viewUrl = meta.webViewLink || makeDriveViewUrl_(fileId);
   const fallbackPreviewUrl = makePreviewUrl_(fileId);
+  if (metadataError) {
+    return ok_({
+      file_id: fileId,
+      name: '',
+      mime_type: '',
+      size: '',
+      source: 'url_fallback_no_proxy_permission',
+      data_url: '',
+      view_url: viewUrl,
+      fallback_preview_url: fallbackPreviewUrl,
+      warning: 'ระบบใช้ลิงก์ Drive สำรองสำหรับรูปนี้'
+    }, 'Image fallback URL loaded');
+  }
 
   // 1) Preferred: authenticated Drive thumbnail proxy.  This normally converts
   // HEIC/large camera uploads into a browser-safe JPEG thumbnail.

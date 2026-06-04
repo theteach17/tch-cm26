@@ -5,7 +5,6 @@ function doGet(e) {
   return tpl.evaluate()
     .setTitle(APP.NAME)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .setFaviconUrl('https://img2.pic.in.th/pic/logofd3322a65d133ac4.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 function include(filename) {
@@ -153,6 +152,10 @@ function api_saveManualScore(payload) { return guardedCall_(['ADMIN','TEACHER'],
 function api_getDashboardData() { return guardedCall_(['ADMIN','TEACHER'], getDashboardData); }
 function api_getGradebook(payload) { return guardedCall_(['ADMIN','TEACHER'], getGradebook, payload || {}); }
 function api_regenerateRoomSheets() { return guardedCall_(['ADMIN','TEACHER'], regenerateActiveRoomSheets); }
+function api_getAttendanceSummary(payload) { return guardedCall_(['ADMIN','TEACHER'], getAttendanceSummary, payload || {}); }
+function api_randomStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], randomStudents, payload || {}); }
+function api_groupStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], groupStudents, payload || {}); }
+function api_getRosterPool(payload) { return guardedCall_(['ADMIN','TEACHER'], getRosterPool, payload || {}); }
 function api_createTermArchive(termId) { return guardedCall_(['ADMIN'], createTermArchive, termId); }
 function api_installSyncTrigger(minutes) { return guardedCall_(['ADMIN'], installTimeDrivenSyncTrigger, minutes || 5); }
 function api_autoMapAndReprocessTopics(payload) { return guardedCall_(['ADMIN','TEACHER'], autoMapAndReprocessTopics, payload || {}); }
