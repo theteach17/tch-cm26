@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '1.9.0-review-viewer-images',
+  VERSION: '2.0.0-attendance-scan-reliability',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',

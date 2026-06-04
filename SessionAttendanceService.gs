@@ -68,11 +68,55 @@ function getScanBootstrap(sessionId) {
   const rfidMap = {}, idMap = {}, present = {};
   detail.roster.forEach(r => {
     const s = r.student || {};
-    idMap[cleanId_(r.student_id)] = { student_id: cleanId_(r.student_id), name: s.student_name_th || s.student_name_en || r.student_id, class_code: r.class_code, student_no: r.student_no || '' };
-    [s.rfid_code, s.student_pay_code, s.backup_card_code].forEach(code => { if (code) rfidMap[cleanId_(code)] = idMap[cleanId_(r.student_id)]; });
+    const sid = cleanId_(r.student_id);
+    if (!sid) return;
+    idMap[sid] = { student_id: sid, name: s.student_name_th || s.student_name_en || r.student_id, class_code: r.class_code, student_no: r.student_no || '' };
+    [s.rfid_code, s.student_pay_code, s.backup_card_code].forEach(code => { if (code) rfidMap[cleanId_(code)] = idMap[sid]; });
   });
   detail.attendance.forEach(a => present[cleanId_(a.student_id)] = true);
-  return ok_({ session: detail.session, roster: Object.values(idMap), rfidMap, idMap, present }, 'Scan bootstrap loaded');
+  return ok_({
+    session: detail.session,
+    roster: Object.values(idMap),
+    rosterCount: Object.keys(idMap).length,
+    rfidCount: Object.keys(rfidMap).length,
+    idMap,
+    rfidMap,
+    present,
+    presentCount: Object.keys(present).length
+  }, 'Scan bootstrap loaded');
+}
+
+function diagnoseScanSession(sessionId) {
+  assertRole_(['ADMIN','TEACHER']);
+  validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
+  const out = { sessionId: sessionId, errors: [], warnings: [] };
+  try {
+    const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));
+    if (!session) throw new Error('Session not found');
+    out.session = session;
+    out.sessionStatus = session.status;
+    out.offeringId = session.offering_id;
+    out.classCode = session.class_code;
+    assertOfferingAccess_(session.offering_id);
+    const offering = getOffering_(session.offering_id);
+    out.offering = offering || null;
+    const enrollments = getCachedEnrollmentsByOffering_(session.offering_id);
+    const students = getCachedStudentMap_();
+    const attendance = getCachedAttendanceIndexBySession_(sessionId);
+    out.enrollmentCount = enrollments.length;
+    out.studentTotal = Object.keys(students.byId || {}).length;
+    out.rfidTotal = Object.keys(students.byRfid || {}).length;
+    out.attendanceIndexCount = attendance.length;
+    out.sampleEnrollments = enrollments.slice(0, 5).map(e => ({ student_id: e.student_id, class_code: e.class_code, status: e.enrollment_status }));
+    out.sampleStudents = out.sampleEnrollments.map(e => students.byId[cleanId_(e.student_id)] || { missingStudent: e.student_id });
+    if (!enrollments.length) out.errors.push('ไม่พบ Enrollments ของ offering นี้ จึงไม่มีรายชื่อสำหรับสแกน');
+    if (!Object.keys(students.byId || {}).length) out.errors.push('Students ว่าง ระบบไม่สามารถจับคู่เลขประจำตัว/บัตรได้');
+    if (String(session.status) !== 'ACTIVE') out.errors.push('Session ไม่ได้อยู่สถานะ ACTIVE');
+    if (!Object.keys(students.byRfid || {}).length) out.warnings.push('ยังไม่มีรหัส RFID/student_pay_code ใน Students แต่ยังสามารถคีย์เลขประจำตัวนักเรียนได้');
+  } catch (err) {
+    out.errors.push(err.message || String(err));
+  }
+  return ok_(out, 'Scan session diagnostics loaded');
 }
 function loadScanContext_(sessionId) {
   const session = findOne_(SHEETS.SESSIONS, r => String(r.session_id) === String(sessionId));

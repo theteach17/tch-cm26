@@ -138,6 +138,7 @@ function api_startSession(payload) { return guardedCall_(['ADMIN','TEACHER'], st
 function api_closeSession(sessionId) { return guardedCall_(['ADMIN','TEACHER'], closeSession, sessionId); }
 function api_getActiveSessions() { return guardedCall_(['ADMIN','TEACHER'], getActiveSessions); }
 function api_getScanBootstrap(sessionId) { return guardedCall_(['ADMIN','TEACHER'], getScanBootstrap, sessionId); }
+function api_diagnoseScanSession(sessionId) { return guardedCall_(['ADMIN','TEACHER'], diagnoseScanSession, sessionId); }
 function api_processScanBatch(sessionId, scans) { return guardedCall_(['ADMIN','TEACHER'], processScanBatch, sessionId, scans || []); }
 function api_markAbsentForSession(sessionId) { return guardedCall_(['ADMIN','TEACHER'], markAbsentForSession, sessionId); }
 function api_listReviewTopics(filters) { return guardedCall_(['ADMIN','TEACHER'], listReviewTopics, filters || {}); }

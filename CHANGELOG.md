@@ -1,3 +1,10 @@
+
+## v2.0.0-attendance-scan-reliability
+- Fixed attendance scan not recording when the active session dropdown was populated but scan bootstrap was not loaded.
+- Scan page now auto-selects the first active session and auto-loads roster/id maps.
+- Added scan readiness panel, server result logs, manual immediate flush, and diagnostics for roster/session problems.
+- Added backend scan diagnostics API and safer scan bootstrap metadata.
+
 # CHANGELOG
 
 ## v1.9.0-review-viewer-images
