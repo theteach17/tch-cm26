@@ -1,4 +1,12 @@
 
+## v2.2.0 - Scan Lock Queue Serialization
+- Prevented overlapping `api_processScanBatch` calls from the same browser by adding a client-side `isFlushing` guard.
+- Increased scan batching window slightly and sends up to 30 scans per server request to reduce ScriptLock contention.
+- Server now returns a retryable `SCAN_LOCK_BUSY` response instead of throwing a long lock timeout.
+- Duplicate scan counting no longer performs per-row `AttendanceIndex` updates during fast scan bursts; duplicates remain visible in `ScanQueue` while the original PRESENT record remains authoritative.
+- Scan lock/busy retries are now shown as a warning and requeued automatically, not as a fatal save failure.
+
+
 ## v2.1.0-scan-leading-zero-normalization
 - Fixed RFID/card scans that contain leading zeros (e.g. `0009832237`) not matching card numbers stored in the Students sheet without leading zeros (e.g. `9832237`).
 - Added backend `normalizeCardCode_()` and card lookup registration for both exact and normalized RFID/student_pay/backup card codes.

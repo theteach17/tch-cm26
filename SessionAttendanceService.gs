@@ -203,9 +203,12 @@ function persistScanResults_(processed, ctx) {
   appendObjects_(SHEETS.ATTENDANCE_LOG, attendanceRows);
   appendObjects_(SHEETS.ATTENDANCE_INDEX, indexRows);
   appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
-  indexUpdates.forEach(patch => updateRowById_(SHEETS.ATTENDANCE_INDEX, 'attendance_id', patch.attendance_id, patch));
+  // Do not update AttendanceIndex for duplicate scans during fast scanning.
+  // Updating duplicate scan_count would require full-row lookups for each repeated scan
+  // and can hold the global ScriptLock too long. The duplicate event is still recorded
+  // in ScanQueue, while the original PRESENT row remains the authoritative record.
   updateAttendanceIndexCache_(ctx.session.session_id, ctx.currentIndex);
-  return { inserted: attendanceRows.length, queued: queueRows.length, scores: scoreRows.length, duplicateUpdates: indexUpdates.length };
+  return { inserted: attendanceRows.length, queued: queueRows.length, scores: scoreRows.length, duplicateUpdates: 0 };
 }
 function summarizeScanResults_(processed, persisted) {
   const results = processed.map(p => p.result);
@@ -216,13 +219,23 @@ function processScanBatch(sessionId, scans) {
   validate_({ sessionId }, { sessionId: { required: true, maxLen: 120 } });
   scans = Array.isArray(scans) ? scans.slice(0, 100) : [];
   if (!scans.length) return ok_({ processed:0, results:[] }, 'No scans');
-  const lock = lock_(30000);
+
+  // Fast-scan reliability: do not let overlapping browser requests wait for 30s
+  // and surface scary red errors. If another batch is still writing, return a
+  // retryable response quickly; the client requeues the scans and retries with
+  // backoff. This prevents data loss and avoids duplicate concurrent writes.
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) {
+    return fail_('SERVER_BUSY_SCAN_LOCK', { code:'SCAN_LOCK_BUSY', retry_after_ms: 1200, processed:0, results:[] });
+  }
   try {
     const ctx = loadScanContext_(sessionId);
     const processed = scans.map(scan => processSingleScan_(scan, ctx));
     const persisted = persistScanResults_(processed, ctx);
     return ok_(summarizeScanResults_(processed, persisted), 'Scan batch processed');
-  } finally { lock.releaseLock(); }
+  } finally {
+    try { lock.releaseLock(); } catch (err) {}
+  }
 }
 function markAbsentForSession(sessionId) {
   assertRole_(['ADMIN','TEACHER']);

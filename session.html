@@ -108,12 +108,48 @@ async function ensureScanReadyUI(){if(state.scan.sessionId&&selectedScanSessionI
 
 async function submitScanInputNowUI(){const input=document.getElementById('scanInput');if(!input)return;const raw=input.value;input.value='';await handleScan(raw,true);}
 
-async function handleScan(raw,flushNow){const rawOriginal=String(raw||'').trim();raw=normalizeScanCodeClient_(rawOriginal);if(!raw)return;const ready=await ensureScanReadyUI();if(!ready){prependScanLog('danger','ยังไม่พร้อมสแกน: ระบบยังไม่ได้โหลดรายชื่อของคาบเรียน');return;}const st=state.scan.rfidMap[raw]||state.scan.rfidMap[rawOriginal]||state.scan.idMap[raw]||state.scan.idMap[rawOriginal];let msg='',cls='';const displayRaw=rawOriginal&&rawOriginal!==raw?`${rawOriginal} → ${raw}`:raw;if(!st){msg='ไม่พบข้อมูลในรายชื่อคาบนี้: '+displayRaw;cls='danger';}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning';}else{state.scan.present[st.student_id]=true;msg='รับข้อมูลแล้ว: '+st.name+(rawOriginal&&rawOriginal!==raw?' · ตัดเลข 0 หน้าแล้ว':'')+' (กำลังส่ง server)';cls='success';}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;prependScanLog(cls,msg);state.scan.pending.push({raw,raw_original:rawOriginal,received_at:new Date().toISOString(),client_id:'web'});updatePendingScanCount();if(flushNow){await flushScans();return;}if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,300);}
+async function handleScan(raw,flushNow){const rawOriginal=String(raw||'').trim();raw=normalizeScanCodeClient_(rawOriginal);if(!raw)return;const ready=await ensureScanReadyUI();if(!ready){prependScanLog('danger','ยังไม่พร้อมสแกน: ระบบยังไม่ได้โหลดรายชื่อของคาบเรียน');return;}const st=state.scan.rfidMap[raw]||state.scan.rfidMap[rawOriginal]||state.scan.idMap[raw]||state.scan.idMap[rawOriginal];let msg='',cls='';const displayRaw=rawOriginal&&rawOriginal!==raw?`${rawOriginal} → ${raw}`:raw;if(!st){msg='ไม่พบข้อมูลในรายชื่อคาบนี้: '+displayRaw;cls='danger';}else if(state.scan.present[st.student_id]){msg='สแกนซ้ำ: '+st.name;cls='warning';}else{state.scan.present[st.student_id]=true;msg='รับข้อมูลแล้ว: '+st.name+(rawOriginal&&rawOriginal!==raw?' · ตัดเลข 0 หน้าแล้ว':'')+' (กำลังส่ง server)';cls='success';}document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;prependScanLog(cls,msg);state.scan.pending.push({raw,raw_original:rawOriginal,received_at:new Date().toISOString(),client_id:'web'});updatePendingScanCount();if(flushNow){await flushScans();return;}if(!state.scan.timer)state.scan.timer=setTimeout(flushScans,800);}
 
 function prependScanLog(type,msg){const box=document.getElementById('scanLog');if(!box)return;const el=document.createElement('div');el.className='alert alert-'+(type||'info')+' py-2 mb-2';el.textContent=new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' · '+msg;box.prepend(el);while(box.children.length>20)box.lastChild.remove();}
 function updatePendingScanCount(){const p=document.getElementById('pendingScanCount');if(p)p.textContent=state.scan.pending.length;const r=document.getElementById('scanRetryCount');if(r)r.textContent=state.scan.retryCount||0;}
 function showOfflineWarning(){const box=document.getElementById('scanOfflineWarning');if(!box)return;box.classList.remove('d-none');box.innerHTML=`<b>ส่งข้อมูลสแกนไม่สำเร็จ</b><br>ระบบหยุด retry เพื่อป้องกัน browser ค้าง เหลือรายการค้างส่ง ${state.scan.pending.length} รายการ<br><textarea class="form-control mt-2" rows="4">${escapeHtml(JSON.stringify(state.scan.pending,null,2))}</textarea><button class="btn btn-outline-primary btn-sm mt-2" onclick="state.scan.retryCount=0;document.getElementById('scanOfflineWarning').classList.add('d-none');flushScans();">ลองส่งใหม่</button>`;}
-async function flushScans(){if(state.scan.timer){clearTimeout(state.scan.timer);state.scan.timer=null;}const batch=state.scan.pending.splice(0,20);updatePendingScanCount();if(!batch.length)return;try{const r=await call('api_processScanBatch',state.scan.sessionId,batch,{silentLoading:true});state.scan.retryCount=0;const data=r.data||{};(data.results||[]).forEach(x=>{if(x.ok){prependScanLog(x.duplicate?'warning':'success',`Server: ${x.message}${x.name?' · '+x.name:''}`);if(x.student_id)state.scan.present[x.student_id]=true;}else{prependScanLog('danger',`Server: ${x.message} (${x.raw})`);}});document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;setScanReadyBox_('success',`บันทึก server แล้ว ${data.inserted||0} รายการ · ซ้ำ ${data.duplicates||0} · error ${data.errors||0} · ค้างส่ง ${state.scan.pending.length}`);}
-catch(e){state.scan.pending=batch.concat(state.scan.pending);state.scan.retryCount=(state.scan.retryCount||0)+1;updatePendingScanCount();if(state.scan.retryCount>=state.maxScanRetry){showOfflineWarning();return;}const delay=Math.min(800*Math.pow(2,state.scan.retryCount),30000);state.scan.timer=setTimeout(flushScans,delay);return;}if(state.scan.pending.length&&!state.scan.timer)state.scan.timer=setTimeout(flushScans,300);}
+async function flushScans(){
+  if(state.scan.timer){clearTimeout(state.scan.timer);state.scan.timer=null;}
+  if(state.scan.isFlushing){
+    if(state.scan.pending.length&&!state.scan.timer)state.scan.timer=setTimeout(flushScans,800);
+    return;
+  }
+  const batch=state.scan.pending.splice(0,30);
+  updatePendingScanCount();
+  if(!batch.length)return;
+  state.scan.isFlushing=true;
+  state.scan.lastFlushAt=Date.now();
+  try{
+    const r=await call('api_processScanBatch',state.scan.sessionId,batch,{silentLoading:true,silentError:true});
+    state.scan.retryCount=0;
+    const data=r.data||{};
+    (data.results||[]).forEach(x=>{
+      if(x.ok){prependScanLog(x.duplicate?'warning':'success',`Server: ${x.message}${x.name?' · '+x.name:''}`);if(x.student_id)state.scan.present[x.student_id]=true;}
+      else{prependScanLog('danger',`Server: ${x.message} (${x.raw})`);}
+    });
+    document.getElementById('presentCount').textContent=Object.keys(state.scan.present).length;
+    setScanReadyBox_('success',`บันทึก server แล้ว ${data.inserted||0} รายการ · ซ้ำ ${data.duplicates||0} · error ${data.errors||0} · ค้างส่ง ${state.scan.pending.length}`);
+  } catch(e){
+    state.scan.pending=batch.concat(state.scan.pending);
+    state.scan.retryCount=(state.scan.retryCount||0)+1;
+    updatePendingScanCount();
+    const msg=(e&&e.message)||(e&&e.data&&e.data.code)||String(e||'');
+    const lockBusy=/LOCK|lock|busy|BUSY|SERVER_BUSY_SCAN_LOCK/.test(msg);
+    prependScanLog(lockBusy?'warning':'danger', lockBusy?'Server กำลังบันทึกชุดก่อนหน้า ระบบจะลองส่งใหม่อัตโนมัติ':'ส่ง server ไม่สำเร็จ: '+msg);
+    if(state.scan.retryCount>=state.maxScanRetry){state.scan.isFlushing=false;showOfflineWarning();return;}
+    const delay=Math.min((lockBusy?1200:800)*Math.pow(2,state.scan.retryCount-1),30000);
+    state.scan.isFlushing=false;
+    state.scan.timer=setTimeout(flushScans,delay);
+    return;
+  } finally {
+    if(state.scan.isFlushing) state.scan.isFlushing=false;
+  }
+  if(state.scan.pending.length&&!state.scan.timer)state.scan.timer=setTimeout(flushScans,500);
+}
 async function markAbsentUI(){return runUiAction('markAbsentUI',async()=>{const sid=selectedScanSessionId_();if(!sid){toast('กรุณาเลือกคาบ','warning');return;}if(!confirm('ยืนยันปิดยอดขาดเรียนของคาบนี้หรือไม่'))return;const r=await call('api_markAbsentForSession',sid);toast('สร้างรายการขาดเรียน '+r.data.absent+' คน');});}
 </script>
