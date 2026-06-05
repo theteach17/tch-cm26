@@ -12,7 +12,7 @@
 
 const APP = Object.freeze({
   NAME: 'Classroom Management Ledger',
-  VERSION: '2.9.0-dashboard-random-speed',
+  VERSION: '3.0.0-no-block-dashboard-random-ui',
   TIMEZONE: 'Asia/Bangkok',
   DEFAULT_DB_SPREADSHEET_ID: '',
   DEFAULT_SOURCE_SPREADSHEET_ID: '',

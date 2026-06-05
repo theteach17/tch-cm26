@@ -150,7 +150,18 @@ function api_randomBookCheck(sessionId, count) { return guardedCall_(['ADMIN','T
 function api_saveBookCheckResult(payload) { return guardedCall_(['ADMIN','TEACHER'], saveBookCheckResult, payload || {}); }
 function api_saveBookCheckBatch(payload) { return guardedCall_(['ADMIN','TEACHER'], saveBookCheckBatch, payload || {}); }
 function api_saveManualScore(payload) { return guardedCall_(['ADMIN','TEACHER'], saveManualScore, payload || {}); }
-function api_getDashboardData() { return guardedCall_(['ADMIN','TEACHER'], getDashboardData); }
+function api_getDashboardData() {
+  // v3.0: Dashboard must never call sheet-heavy services.
+  // This endpoint intentionally returns a tiny payload and does not read any spreadsheet.
+  // Security note: it contains no student data. It only requires that the user is signed in.
+  try { assertAuthenticated_(); } catch (err) { return fail_(err.message); }
+  return ok_({
+    mode: 'client-only',
+    appVersion: APP.VERSION,
+    serverTime: Utilities.formatDate(new Date(), APP.TIMEZONE || 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'),
+    note: 'แดชบอร์ดโหมดไม่บล็อก: ไม่มีการอ่านชีตจาก API นี้ เพื่อป้องกันหน้าค้างระหว่างใช้งานจริง'
+  }, 'แดชบอร์ดพร้อมใช้งาน');
+}
 function api_getGradebook(payload) { return guardedCall_(['ADMIN','TEACHER'], getGradebook, payload || {}); }
 function api_getScorebook(payload) { return guardedCall_(['ADMIN','TEACHER'], getScorebook, payload || {}); }
 function api_getAttendanceDetail(payload) { return guardedCall_(['ADMIN','TEACHER'], getAttendanceDetail, payload || {}); }

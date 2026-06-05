@@ -41,6 +41,19 @@ function buildRosterStudents_(offeringId) {
   });
 }
 
+
+function getCachedRosterPoolAll_(offeringId) {
+  const key = 'ROSTER_POOL_ALL_' + String(offeringId || '').replace(/[^A-Za-z0-9_-]/g, '_');
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(key);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (err) {}
+  }
+  const roster = buildRosterStudents_(offeringId);
+  try { cache.put(key, JSON.stringify(roster), 900); } catch (err) {}
+  return roster;
+}
+
 function getAttendanceStatusForSession_(sessionId) {
   const rows = getRows_(SHEETS.ATTENDANCE_LOG).filter(function (r) { return String(r.session_id) === String(sessionId); });
   const byStudent = {};
@@ -93,7 +106,7 @@ function getRosterPool(payload) {
   if (!offering) throw new Error('กรุณาเลือกห้อง/รายวิชาก่อน');
   assertOfferingAccess_(offering.offering_id);
 
-  const roster = buildRosterStudents_(offering.offering_id);
+  const roster = getCachedRosterPoolAll_(offering.offering_id);
   const requestedMode = String(payload.pool_mode || 'ALL').toUpperCase();
   let appliedMode = requestedMode === 'PRESENT' ? 'PRESENT' : 'ALL';
   let fallbackReason = '';

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v3.0.0-no-block-dashboard-random-ui
+- ตัดการเรียกชีตออกจาก Dashboard API โดยตรง เพื่อแก้ปัญหา `api_getDashboardData` Running ค้าง
+- ปรับ Dashboard ให้ render จากข้อมูล bootstrap/client state เท่านั้น
+- ปรับเมนูสุ่มให้ไม่ preload รายชื่อแบบหนักตอนเลือกห้อง และ cache รายชื่อบน server/client
+- ปรับการบันทึกคะแนนสมุดจากเมนูสุ่มเป็น non-blocking UI เพื่อไม่ทำให้ชั้นเรียนสะดุด
+
+# CHANGELOG
+
 ## v2.9.0-dashboard-random-speed
 
 ### Fixed

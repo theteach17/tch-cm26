@@ -126,27 +126,21 @@ function countTodayAttendanceFast_(termId) {
 }
 
 function getDashboardData() {
-  // v2.9: ultra-light dashboard. This function intentionally avoids scanning large sheets.
-  // Dashboard must never block teaching workflows. Detailed data lives in dedicated menus.
-  const started = Date.now();
-  const termId = getActiveTerm_();
-  let offerings = [];
-  try { offerings = listUiOfferings_ ? listUiOfferings_() : listActiveOfferings(); } catch (err) { offerings = []; }
-  const data = {
-    termId: termId,
+  // v3.0 no-block dashboard. Do not read large sheets here.
+  // Detailed data belongs in dedicated menus (Gradebook, Attendance, Review).
+  return ok_({
+    termId: getSetting_('ACTIVE_TERM_ID') || APP.ACTIVE_TERM_ID,
     activeSessions: [],
     totalSessions: '—',
     submissions: '—',
     pendingReview: '—',
     voided: '—',
     attendanceToday: '—',
-    offerings: offerings,
-    generatedAt: now_(),
-    mode: 'instant',
-    elapsedMs: Date.now() - started,
-    note: 'แดชบอร์ดโหมดเร็ว: ระบบไม่สแกนชีตขนาดใหญ่ เพื่อไม่ให้หน้าเว็บค้างระหว่างสอน ใช้เมนูเฉพาะเพื่อดูรายละเอียดคะแนน/เวลาเรียน/ตรวจงาน'
-  };
-  return ok_(data, 'โหลดแดชบอร์ดโหมดเร็วสำเร็จ');
+    offerings: [],
+    generatedAt: Utilities.formatDate(new Date(), APP.TIMEZONE || 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'),
+    mode: 'client-only',
+    note: 'แดชบอร์ดโหมดไม่บล็อก: ไม่อ่านชีตขนาดใหญ่จากหน้าแรก'
+  }, 'แดชบอร์ดพร้อมใช้งาน');
 }
 function getGradebook(payload) {
   payload = payload || {};
