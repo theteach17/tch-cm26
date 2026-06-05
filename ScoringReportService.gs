@@ -47,6 +47,7 @@ function saveManualScore(payload) {
   appendObjects_(SHEETS.SCORE_LEDGER, scoreRows);
   return ok_({ count: manualRows.length }, 'Manual scores saved');
 }
+
 /**
  * Lightweight projection reader for dashboard counters.
  * It reads only the columns needed by the dashboard, instead of getRows_() on entire sheets.
@@ -125,33 +126,27 @@ function countTodayAttendanceFast_(termId) {
 }
 
 function getDashboardData() {
+  // v2.9: ultra-light dashboard. This function intentionally avoids scanning large sheets.
+  // Dashboard must never block teaching workflows. Detailed data lives in dedicated menus.
   const started = Date.now();
   const termId = getActiveTerm_();
-  const user = getCurrentUser();
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'DASH_V28_' + termId + '_' + String(user.email || '').toLowerCase();
-  const cached = cache.get(cacheKey);
-  if (cached) return ok_(JSON.parse(cached), 'Dashboard loaded from cache');
-
-  const offerings = listUiOfferings_ ? listUiOfferings_() : listActiveOfferings();
-  const allowedOfferings = new Set(offerings.map(function (o) { return String(o.offering_id); }));
-  const sessionInfo = readActiveSessionsFast_(termId, allowedOfferings);
-
+  let offerings = [];
+  try { offerings = listUiOfferings_ ? listUiOfferings_() : listActiveOfferings(); } catch (err) { offerings = []; }
   const data = {
     termId: termId,
-    activeSessions: sessionInfo.active,
-    totalSessions: sessionInfo.total,
-    submissions: countSheetDataRowsFast_(SHEETS.NORMALIZED_SUBMISSIONS),
-    pendingReview: countSheetDataRowsFast_(SHEETS.REVIEW_INDEX),
-    voided: 0,
-    attendanceToday: countTodayAttendanceFast_(termId),
+    activeSessions: [],
+    totalSessions: '—',
+    submissions: '—',
+    pendingReview: '—',
+    voided: '—',
+    attendanceToday: '—',
     offerings: offerings,
     generatedAt: now_(),
-    mode: 'lightweight',
-    elapsedMs: Date.now() - started
+    mode: 'instant',
+    elapsedMs: Date.now() - started,
+    note: 'แดชบอร์ดโหมดเร็ว: ระบบไม่สแกนชีตขนาดใหญ่ เพื่อไม่ให้หน้าเว็บค้างระหว่างสอน ใช้เมนูเฉพาะเพื่อดูรายละเอียดคะแนน/เวลาเรียน/ตรวจงาน'
   };
-  try { cache.put(cacheKey, JSON.stringify(sanitizeForClient_(data)), 60); } catch (err) {}
-  return ok_(data, 'Dashboard loaded');
+  return ok_(data, 'โหลดแดชบอร์ดโหมดเร็วสำเร็จ');
 }
 function getGradebook(payload) {
   payload = payload || {};
@@ -246,17 +241,22 @@ function saveBookCheckBatch(payload) {
   assertOfferingAccess_(session.offering_id);
   const bookRows = [];
   const scoreRows = [];
+  const defaultGoodScore = numericOrZero_(getSetting_('DEFAULT_BOOK_BROUGHT_SCORE') || 1);
+  const defaultBadScore = numericOrZero_(getSetting_('DEFAULT_BOOK_NOT_BROUGHT_SCORE') || -1);
+  const timestampNow = now_();
+  const eventDate = toDateOnly_(session.session_date);
+  const userEmail = getUserEmail_();
   results.forEach(function (item) {
     const studentId = cleanId_(item.student_id);
     if (!studentId) return;
     const result = String(item.result || 'BROUGHT').toUpperCase();
     const delta = item.score_delta !== undefined && item.score_delta !== ''
       ? Number(item.score_delta)
-      : (result === 'BROUGHT' ? numericOrZero_(getSetting_('DEFAULT_BOOK_BROUGHT_SCORE') || 1) : numericOrZero_(getSetting_('DEFAULT_BOOK_NOT_BROUGHT_SCORE') || -1));
+      : (result === 'BROUGHT' ? defaultGoodScore : defaultBadScore);
     const id = uuid_('BOOK');
     const title = result === 'BROUGHT' ? 'นำสมุดมา' : 'ไม่นำสมุดมา';
-    bookRows.push({ book_check_id:id, term_id: session.term_id, session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, is_random: true, result: result, score_delta: delta, checked_by: getUserEmail_(), checked_at: now_(), note: payload.note || 'บันทึกจากเมนูสุ่มชื่อ' });
-    scoreRows.push({ score_event_id:'SCORE-' + id, term_id: session.term_id, event_date: toDateOnly_(session.session_date), session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, event_type:'BOOK_CHECK', score_title:title, score_delta: delta, source_type:'BOOK_CHECK', source_ref:id, status:'ACTIVE', void_reason:'', created_by:getUserEmail_(), created_at:now_(), updated_at:now_() });
+    bookRows.push({ book_check_id:id, term_id: session.term_id, session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, is_random: true, result: result, score_delta: delta, checked_by: userEmail, checked_at: timestampNow, note: payload.note || 'บันทึกจากเมนูสุ่มชื่อ' });
+    scoreRows.push({ score_event_id:'SCORE-' + id, term_id: session.term_id, event_date: eventDate, session_id: session.session_id, offering_id: session.offering_id, class_code: session.class_code, student_id: studentId, event_type:'BOOK_CHECK', score_title:title, score_delta: delta, source_type:'BOOK_CHECK', source_ref:id, status:'ACTIVE', void_reason:'', created_by:userEmail, created_at:timestampNow, updated_at:timestampNow });
   });
   if (!bookRows.length) throw new Error('ไม่พบเลขประจำตัวนักเรียนที่ถูกต้องสำหรับบันทึกคะแนน');
   appendObjects_(SHEETS.BOOK_CHECK_LOG, bookRows);

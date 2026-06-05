@@ -160,6 +160,7 @@ function api_randomStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], 
 function api_groupStudents(payload) { return guardedCall_(['ADMIN','TEACHER'], groupStudents, payload || {}); }
 function api_listGroupingHistory(payload) { return guardedCall_(['ADMIN','TEACHER'], listGroupingHistory, payload || {}); }
 function api_getRosterPool(payload) { return guardedCall_(['ADMIN','TEACHER'], getRosterPool, payload || {}); }
+function api_getRandomToolBootstrap(payload) { return guardedCall_(['ADMIN','TEACHER'], getRandomToolBootstrap, payload || {}); }
 function api_listToolSessions(payload) { return guardedCall_(['ADMIN','TEACHER'], listClassroomToolSessions, payload || {}); }
 function api_createTermArchive(termId) { return guardedCall_(['ADMIN'], createTermArchive, termId); }
 function api_installSyncTrigger(minutes) { return guardedCall_(['ADMIN'], installTimeDrivenSyncTrigger, minutes || 5); }

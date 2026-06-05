@@ -86,6 +86,7 @@ function getRosterPool(payload) {
     session_id: { maxLen: 120 },
     pool_mode: { maxLen: 30 }
   });
+
   const session = payload.session_id ? getSessionForPool_(payload.session_id) : null;
   const offeringId = payload.offering_id || (session ? session.offering_id : '');
   const offering = getOffering_(offeringId);
@@ -93,21 +94,30 @@ function getRosterPool(payload) {
   assertOfferingAccess_(offering.offering_id);
 
   const roster = buildRosterStudents_(offering.offering_id);
-  const att = session ? getAttendanceStatusForSession_(session.session_id) : { present: new Set(), absent: new Set(), late: new Set(), excused: new Set(), hasFinalizedAbsence: false };
   const requestedMode = String(payload.pool_mode || 'ALL').toUpperCase();
   let appliedMode = requestedMode === 'PRESENT' ? 'PRESENT' : 'ALL';
   let fallbackReason = '';
   let pool = roster.slice();
+  let att = { present: new Set(), absent: new Set(), late: new Set(), excused: new Set(), hasFinalizedAbsence: false, rows: [] };
 
+  // v2.9 performance rule:
+  // Do not read AttendanceLog when the teacher uses all roster, or when the selected session is still open.
+  // This makes the first random draw nearly instant after the roster is cached.
   if (appliedMode === 'PRESENT') {
     if (!session) {
       appliedMode = 'ALL';
       fallbackReason = 'ยังไม่ได้เลือกคาบเรียน ระบบจึงใช้รายชื่อทั้งห้อง';
-    } else if (!isSessionAttendanceFinalized_(session, att)) {
+    } else if (String(session.status || '').toUpperCase() !== 'CLOSED') {
       appliedMode = 'ALL';
       fallbackReason = 'คาบนี้ยังไม่ได้ปิดยอดขาดเรียน ระบบจึงใช้รายชื่อทั้งห้องตามเงื่อนไข';
     } else {
-      pool = roster.filter(function (s) { return att.present.has(s.student_id) || att.late.has(s.student_id); });
+      att = getAttendanceStatusForSession_(session.session_id);
+      if (!isSessionAttendanceFinalized_(session, att)) {
+        appliedMode = 'ALL';
+        fallbackReason = 'ยังไม่พบข้อมูลปิดยอดขาดเรียน ระบบจึงใช้รายชื่อทั้งห้องตามเงื่อนไข';
+      } else {
+        pool = roster.filter(function (s) { return att.present.has(s.student_id) || att.late.has(s.student_id); });
+      }
     }
   }
 
@@ -117,7 +127,7 @@ function getRosterPool(payload) {
     requested_mode: requestedMode,
     applied_mode: appliedMode,
     fallback_reason: fallbackReason,
-    attendance_finalized: !!(session && isSessionAttendanceFinalized_(session, att)),
+    attendance_finalized: !!(session && String(session.status || '').toUpperCase() === 'CLOSED'),
     roster_count: roster.length,
     pool_count: pool.length,
     present_count: att.present.size,
@@ -127,6 +137,15 @@ function getRosterPool(payload) {
     roster: roster,
     pool: pool
   }, 'โหลดรายชื่อสำเร็จ');
+}
+
+function getRandomToolBootstrap(payload) {
+  assertRole_(['ADMIN','TEACHER']);
+  payload = payload || {};
+  validate_(payload, { offering_id: { required: true, maxLen: 120 }, session_id: { maxLen: 120 }, pool_mode: { maxLen: 30 } });
+  const sessions = listClassroomToolSessions({ offering_id: payload.offering_id, limit: payload.limit || 40 }).data.sessions || [];
+  const pool = getRosterPool(payload).data;
+  return ok_({ sessions: sessions, pool: pool }, 'เตรียมข้อมูลสุ่มชื่อสำเร็จ');
 }
 
 function shuffleArray_(arr) {

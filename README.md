@@ -1,3 +1,7 @@
+# Classroom Management Ledger v2.9.0
+
+This build focuses on dashboard stability and faster random-name/book-check workflow.
+
 # Classroom Management Ledger System
 
 Production-oriented Google Apps Script + Google Sheets Web App สำหรับจัดการคาบเรียน เช็กชื่อด้วยบัตร RFID ดึงงานจาก Google Form ตรวจงานจากรูปภาพ จัดการคะแนน สุ่มชื่อ จับกลุ่ม และสรุปผลรายห้อง
